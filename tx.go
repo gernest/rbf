@@ -2285,6 +2285,26 @@ func (tx *Tx) SnapshotReader() (io.Reader, error) {
 	return &snapshotReader{tx: tx}, nil
 }
 
+func (tx *Tx) backup(w io.Writer) error {
+	if tx.db == nil {
+		return ErrTxClosed
+	}
+	var pgno uint32
+	last := readMetaPageN(tx.meta[:])
+	for pgno < last {
+		buf, _, err := tx.readPage(pgno)
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(buf)
+		if err != nil {
+			return err
+		}
+		pgno++
+	}
+	return nil
+}
+
 type snapshotReader struct {
 	tx   *Tx
 	pgno uint32

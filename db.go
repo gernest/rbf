@@ -160,6 +160,39 @@ func (db *DB) Open() (err error) {
 	return nil
 }
 
+// Backup creates a snapshot of the database and writes it to w. To restore the
+// snapshot call Restore.
+func (db *DB) Backup(w io.Writer) error {
+	tx, err := db.Begin(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	return tx.backup(w)
+}
+
+// Restore restores a snapshot file obtained by calling (*DB)Backup in database
+// path. Make sure the database is closed before calling restore.
+func Restore(r io.Reader, path string) error {
+	dataPath := filepath.Join(path, "data")
+	tempPath := dataPath + ".tmp"
+	o, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	defer o.Close()
+	_, err = o.ReadFrom(r)
+	if err != nil {
+		return err
+	}
+	err = o.Close()
+	if err != nil {
+		return err
+	}
+	return os.Rename(tempPath, dataPath)
+
+}
+
 func (db *DB) openWAL() (err error) {
 	// Open WAL file writer.
 	if db.walFile, err = os.OpenFile(db.WALPath(), os.O_WRONLY|os.O_CREATE, 0o600); err != nil {

@@ -3,6 +3,7 @@
 package rbf_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -597,4 +599,56 @@ func TestMain(m *testing.M) {
 		}
 	}()
 	os.Exit(m.Run())
+}
+
+func TestDB_Backup(t *testing.T) {
+	db := MustOpenDB(t)
+	defer db.Close()
+
+	tx, err := db.Begin(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Add("backup", 1, 2, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = tx.Commit()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var b bytes.Buffer
+	err = db.Backup(&b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dbPath := t.TempDir()
+	err = rbf.Restore(&b, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db2 := rbf.NewDB(dbPath, nil)
+	err = db2.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db2.Close()
+	if db2.Path == db.Path {
+		t.Fatal("opened same database")
+	}
+	tx, err = db2.Begin(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+
+	r, err := tx.RoaringBitmap("backup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []uint64{1, 2, 3}
+	got := r.Slice()
+	if !reflect.DeepEqual(want, got) {
+		t.Fatalf("want %v got %v", want, got)
+	}
 }
