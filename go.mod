@@ -5,7 +5,8 @@ go 1.22.2
 require (
 	github.com/benbjohnson/immutable v0.4.3
 	github.com/felixge/fgprof v0.9.4
-	github.com/gernest/roaring v0.22.2
+	github.com/gernest/roaring v0.22.3
+	github.com/gernest/rows v1.22.9
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/sync v0.7.0
