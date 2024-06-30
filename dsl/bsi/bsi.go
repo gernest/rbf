@@ -49,6 +49,13 @@ func Extract(c *rbf.Cursor, shard uint64, exists *rows.Row, f func(column uint64
 	if err != nil {
 		return err
 	}
+	sign, err := cursor.Row(c, shard, bsiSignBit)
+	if err != nil {
+		return err
+	}
+	sign = sign.Intersect(exists)
+	mergeBits(sign, 1<<63, data)
+
 	for i := uint64(0); i < bitDepth; i++ {
 		bits, err := cursor.Row(c, shard, bsiOffsetBit+uint64(i))
 		if err != nil {
