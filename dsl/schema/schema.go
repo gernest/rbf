@@ -14,7 +14,7 @@ import (
 )
 
 type Translator interface {
-	Tr(field uint64, data []byte) uint64
+	Tr(field string, data []byte) uint64
 }
 
 // Schema maps proto fields to rbf types.
@@ -104,9 +104,9 @@ func setup(msg proto.Message, tr Translator) (map[protoreflect.FieldNumber]batch
 				return nil
 			}
 		case protoreflect.StringKind:
-			fn = str(uint64(f.Number()), tr)
+			fn = str(string(f.Name()), tr)
 		case protoreflect.BytesKind:
-			fn = bytes(uint64(f.Number()), tr)
+			fn = bytes(string(f.Name()), tr)
 		default:
 			return nil, fmt.Errorf("%s is not supported", f.Kind())
 		}
@@ -115,14 +115,14 @@ func setup(msg proto.Message, tr Translator) (map[protoreflect.FieldNumber]batch
 	return o, nil
 }
 
-func str(n uint64, tr Translator) batchWriterFunc {
+func str(n string, tr Translator) batchWriterFunc {
 	return func(r *roaring.Bitmap, id uint64, value protoreflect.Value) error {
 		bsi.Add(r, id, int64(tr.Tr(n, []byte(value.String()))))
 		return nil
 	}
 }
 
-func bytes(n uint64, tr Translator) batchWriterFunc {
+func bytes(n string, tr Translator) batchWriterFunc {
 	return func(r *roaring.Bitmap, id uint64, value protoreflect.Value) error {
 		bsi.Add(r, id, int64(tr.Tr(n, value.Bytes())))
 		return nil
