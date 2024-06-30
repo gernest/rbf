@@ -37,25 +37,29 @@ const (
 func Compare(
 	c *rbf.Cursor,
 	shard uint64, op Operation,
-	valueOrStart uint64, end uint64,
+	valueOrStart int64, end int64,
 	columns *rows.Row) (*rows.Row, error) {
 	var r *rows.Row
 	var err error
+	bitDepth, err := depth(c)
+	if err != nil {
+		return nil, err
+	}
 	switch op {
 	case LT:
-		r, err = rangeLT(c, shard, valueOrStart, false)
+		r, err = rangeLT(c, shard, bitDepth, valueOrStart, false)
 	case LE:
-		r, err = rangeLT(c, shard, valueOrStart, true)
+		r, err = rangeLT(c, shard, bitDepth, valueOrStart, true)
 	case GT:
-		r, err = rangeGT(c, shard, valueOrStart, false)
+		r, err = rangeGT(c, shard, bitDepth, valueOrStart, false)
 	case GE:
-		r, err = rangeGT(c, shard, valueOrStart, true)
+		r, err = rangeGT(c, shard, bitDepth, valueOrStart, true)
 	case EQ:
-		r, err = rangeEQ(c, shard, valueOrStart)
+		r, err = rangeEQ(c, shard, bitDepth, valueOrStart)
 	case NEQ:
-		r, err = rangeNEQ(c, shard, valueOrStart)
+		r, err = rangeNEQ(c, shard, bitDepth, valueOrStart)
 	case RANGE:
-		r, err = rangeBetween(c, shard, valueOrStart, end)
+		r, err = rangeBetween(c, shard, bitDepth, valueOrStart, end)
 	default:
 		return rows.NewRow(), nil
 	}
@@ -68,7 +72,7 @@ func Compare(
 	return r, nil
 }
 
-func rangeLT(c *rbf.Cursor, shard uint64, predicate uint64, allowEquality bool) (*rows.Row, error) {
+func rangeLT(c *rbf.Cursor, shard, bitDepth uint64, predicate int64, allowEquality bool) (*rows.Row, error) {
 	if predicate == 1 && !allowEquality {
 		predicate, allowEquality = 0, true
 	}
@@ -78,15 +82,34 @@ func rangeLT(c *rbf.Cursor, shard uint64, predicate uint64, allowEquality bool) 
 	if err != nil {
 		return nil, err
 	}
+	sign, err := cursor.Row(c, shard, bsiSignBit)
+	if err != nil {
+		return nil, err
+	}
+	upredicate := absInt64(predicate)
+
 	switch {
 	case predicate == 0 && !allowEquality:
 		// Match all negative integers.
-		return rows.NewRow(), nil
+		return b.Intersect(sign), nil
 	case predicate == 0 && allowEquality:
 		// Match all integers that are either negative or 0.
-		return rangeEQ(c, shard, 0)
+		zeroes, err := rangeEQ(c, shard, bitDepth, 0)
+		if err != nil {
+			return nil, err
+		}
+		return b.Intersect(sign).Union(zeroes), nil
+	case predicate < 0:
+		// Match all every negative number beyond the predicate.
+		return rangeGTUnsigned(c, shard, b.Intersect(sign), bitDepth, upredicate, allowEquality)
 	default:
-		return rangeLTUnsigned(c, shard, b, 64, predicate, allowEquality)
+		// Match positive numbers less than the predicate, and all negatives.
+		pos, err := rangeLTUnsigned(c, shard, b.Difference(sign), bitDepth, upredicate, allowEquality)
+		if err != nil {
+			return nil, err
+		}
+		neg := b.Intersect(sign)
+		return pos.Union(neg), nil
 	}
 }
 
@@ -135,15 +158,26 @@ func rangeLTUnsigned(c *rbf.Cursor, shard uint64, filter *rows.Row, bitDepth, pr
 	return matched, nil
 }
 
-func rangeGT(c *rbf.Cursor, shard uint64, predicate uint64, allowEquality bool) (*rows.Row, error) {
+func rangeGT(c *rbf.Cursor, shard uint64, bitDepth uint64, predicate int64, allowEquality bool) (*rows.Row, error) {
+	if predicate == -1 && !allowEquality {
+		predicate, allowEquality = 0, true
+	}
+
 	b, err := cursor.Row(c, shard, bsiExistsBit)
+	if err != nil {
+		return nil, err
+	}
+	// Create predicate without sign bit.
+	upredicate := absInt64(predicate)
+
+	sign, err := cursor.Row(c, shard, bsiSignBit)
 	if err != nil {
 		return nil, err
 	}
 	switch {
 	case predicate == 0 && !allowEquality:
 		// Match all positive numbers except zero.
-		nonzero, err := rangeNEQ(c, shard, 0)
+		nonzero, err := rangeNEQ(c, shard, bitDepth, 0)
 		if err != nil {
 			return nil, err
 		}
@@ -151,10 +185,18 @@ func rangeGT(c *rbf.Cursor, shard uint64, predicate uint64, allowEquality bool) 
 		fallthrough
 	case predicate == 0 && allowEquality:
 		// Match all positive numbers.
-		return b, nil
-	default:
+		return b.Difference(sign), nil
+	case predicate >= 0:
 		// Match all positive numbers greater than the predicate.
-		return rangeGTUnsigned(c, shard, b, 64, uint64(predicate), allowEquality)
+		return rangeGTUnsigned(c, shard, b.Difference(sign), bitDepth, upredicate, allowEquality)
+	default:
+		// Match all positives and greater negatives.
+		neg, err := rangeLTUnsigned(c, shard, b.Intersect(sign), bitDepth, upredicate, allowEquality)
+		if err != nil {
+			return nil, err
+		}
+		pos := b.Difference(sign)
+		return pos.Union(neg), nil
 	}
 }
 
@@ -208,21 +250,55 @@ prep:
 	return matched, nil
 }
 
-func rangeBetween(c *rbf.Cursor, shard uint64, predicateMin, predicateMax uint64) (*rows.Row, error) {
+func rangeBetween(c *rbf.Cursor, shard, bitDepth uint64, predicateMin, predicateMax int64) (*rows.Row, error) {
 	b, err := cursor.Row(c, shard, bsiExistsBit)
 	if err != nil {
 		return nil, err
 	}
 
+	// Convert predicates to unsigned values.
+	upredicateMin, upredicateMax := absInt64(predicateMin), absInt64(predicateMax)
+
 	switch {
 	case predicateMin == predicateMax:
-		return rangeEQ(c, shard, predicateMin)
+		return rangeEQ(c, shard, bitDepth, predicateMin)
+	case predicateMin >= 0:
+		// Handle positive-only values.
+		r, err := cursor.Row(c, shard, bsiSignBit)
+		if err != nil {
+			return nil, err
+		}
+		return rangeBetweenUnsigned(c, shard, b.Difference(r), bitDepth, upredicateMin, upredicateMax)
+	case predicateMax < 0:
+		// Handle negative-only values. Swap unsigned min/max predicates.
+		r, err := cursor.Row(c, shard, bsiSignBit)
+		if err != nil {
+			return nil, err
+		}
+		return rangeBetweenUnsigned(c, shard, b.Intersect(r), bitDepth, upredicateMax, upredicateMin)
 	default:
-		return rangeBetweenUnsigned(c, shard, b, predicateMin, predicateMax)
+		// If predicate crosses positive/negative boundary then handle separately and union.
+		r0, err := cursor.Row(c, shard, bsiSignBit)
+		if err != nil {
+			return nil, err
+		}
+		pos, err := rangeLTUnsigned(c, shard, b.Difference(r0), bitDepth, upredicateMax, true)
+		if err != nil {
+			return nil, err
+		}
+		r1, err := cursor.Row(c, shard, bsiSignBit)
+		if err != nil {
+			return nil, err
+		}
+		neg, err := rangeLTUnsigned(c, shard, b.Intersect(r1), bitDepth, upredicateMin, true)
+		if err != nil {
+			return nil, err
+		}
+		return pos.Union(neg), nil
 	}
 }
 
-func rangeBetweenUnsigned(c *rbf.Cursor, shard uint64, filter *rows.Row, predicateMin, predicateMax uint64) (*rows.Row, error) {
+func rangeBetweenUnsigned(c *rbf.Cursor, shard uint64, filter *rows.Row, bitDepth, predicateMin, predicateMax uint64) (*rows.Row, error) {
 	switch {
 	case predicateMax > (1<<64)-1:
 		// The upper bound cannot be violated.
@@ -235,7 +311,7 @@ func rangeBetweenUnsigned(c *rbf.Cursor, shard uint64, filter *rows.Row, predica
 	// Compare any upper bits which are equal.
 	diffLen := bits.Len64(predicateMax ^ predicateMin)
 	remaining := filter
-	for i := int(64 - 1); i >= diffLen; i-- {
+	for i := int(bitDepth - 1); i >= diffLen; i-- {
 		row, err := cursor.Row(c, shard, uint64(bsiOffsetBit+i))
 		if err != nil {
 			return nil, err
@@ -265,33 +341,47 @@ func rangeBetweenUnsigned(c *rbf.Cursor, shard uint64, filter *rows.Row, predica
 	return remaining, nil
 }
 
-func rangeEQ(c *rbf.Cursor, shard uint64, predicate uint64, filter ...*rows.Row) (*rows.Row, error) {
+func rangeEQ(c *rbf.Cursor, shard, bitDepth uint64, predicate int64, filter ...*rows.Row) (*rows.Row, error) {
 	// Start with set of columns with values set.
 	b, err := cursor.Row(c, shard, bsiExistsBit)
 	if err != nil {
 		return nil, err
 	}
-	if len(filter) > 0 {
-		b = b.Intersect(filter[0])
+	upredicate := absInt64(predicate)
+	if uint64(bits.Len64(upredicate)) > bitDepth {
+		// Predicate is out of range.
+		return rows.NewRow(), nil
 	}
-	bitDepth := bits.LeadingZeros64(predicate)
+
+	// Filter to only positive/negative numbers.
+	sign, err := cursor.Row(c, shard, bsiSignBit)
+	if err != nil {
+		return nil, err
+	}
+	if predicate < 0 {
+		b = b.Intersect(sign) // only negatives
+	} else {
+		b = b.Difference(sign) // only positives
+	}
 	// Filter any bits that don't match the current bit value.
 	for i := int(bitDepth - 1); i >= 0; i-- {
 		row, err := cursor.Row(c, shard, uint64(bsiOffsetBit+i))
 		if err != nil {
 			return nil, err
 		}
-		bit := (predicate >> uint(i)) & 1
+		bit := (upredicate >> uint(i)) & 1
+
 		if bit == 1 {
 			b = b.Intersect(row)
 		} else {
 			b = b.Difference(row)
 		}
 	}
+
 	return b, nil
 }
 
-func rangeNEQ(c *rbf.Cursor, shard uint64, predicate uint64) (*rows.Row, error) {
+func rangeNEQ(c *rbf.Cursor, shard, bitDepth uint64, predicate int64) (*rows.Row, error) {
 	// Start with set of columns with values set.
 	b, err := cursor.Row(c, shard, bsiExistsBit)
 	if err != nil {
@@ -299,7 +389,7 @@ func rangeNEQ(c *rbf.Cursor, shard uint64, predicate uint64) (*rows.Row, error) 
 	}
 
 	// Get the equal bitmap.
-	eq, err := rangeEQ(c, shard, predicate)
+	eq, err := rangeEQ(c, shard, bitDepth, predicate)
 	if err != nil {
 		return nil, err
 	}
@@ -308,4 +398,15 @@ func rangeNEQ(c *rbf.Cursor, shard uint64, predicate uint64) (*rows.Row, error) 
 	b = b.Difference(eq)
 
 	return b, nil
+}
+
+func absInt64(v int64) uint64 {
+	switch {
+	case v > 0:
+		return uint64(v)
+	case v == -9223372036854775808:
+		return 9223372036854775808
+	default:
+		return uint64(-v)
+	}
 }
