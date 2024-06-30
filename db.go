@@ -446,6 +446,12 @@ func (db *DB) checkpoint() (err error) {
 	return nil
 }
 
+func (db *DB) IsClosed() bool {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	return !db.opened
+}
+
 // Close closes the database.
 func (db *DB) Close() (err error) {
 	// mark db as closed, spawn a thing to wait for existing tx to drain, then
