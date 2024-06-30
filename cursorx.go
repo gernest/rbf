@@ -9,9 +9,192 @@ import (
 	"math"
 	"os"
 
+	"github.com/gernest/rbf/vprint"
 	"github.com/gernest/roaring"
 	"github.com/pkg/errors"
 )
+
+func (c *Cursor) ApplyRewriter(key uint64, rewriter roaring.BitmapRewriter) (err error) {
+	f := c.getContainerFilter(nil, rewriter)
+	defer f.Close()
+	return f.ApplyRewriter()
+}
+
+func (c *Cursor) ApplyFilter(key uint64, filter roaring.BitmapFilter) (err error) {
+	_, err = c.Seek(key)
+	if err != nil {
+		return err
+	}
+	f := c.getContainerFilter(filter, nil)
+	defer f.Close()
+	return f.ApplyFilter()
+}
+
+func (c *Cursor) Count() (uint64, error) {
+	if err := c.First(); err == io.EOF {
+		return 0, nil
+	} else if err != nil {
+		return 0, err
+	}
+
+	var n uint64
+	for {
+		if err := c.Next(); err == io.EOF {
+			break
+		} else if err != nil {
+			return 0, err
+		}
+
+		elem := &c.stack.elems[c.stack.top]
+		leafPage, _, err := c.tx.readPage(elem.pgno)
+		if err != nil {
+			return 0, err
+		}
+		cell := readLeafCell(leafPage, elem.index)
+
+		n += uint64(cell.BitN)
+	}
+	return n, nil
+}
+
+func (c *Cursor) Max() (uint64, error) {
+	if err := c.Last(); err == io.EOF {
+		return 0, nil
+	} else if err != nil {
+		return 0, err
+	}
+	elem := &c.stack.elems[c.stack.top]
+	leafPage, _, err := c.tx.readPage(elem.pgno)
+	if err != nil {
+		return 0, err
+	}
+	cell := readLeafCell(leafPage, elem.index)
+	return uint64((cell.Key << 16) | uint64(cell.lastValue(c.tx))), nil
+}
+
+func (c *Cursor) Min() (uint64, bool, error) {
+	if err := c.First(); err == io.EOF {
+		return 0, false, nil
+	} else if err != nil {
+		return 0, false, err
+	}
+
+	elem := &c.stack.elems[c.stack.top]
+	leafPage, _, err := c.tx.readPage(elem.pgno)
+	if err != nil {
+		return 0, false, err
+	}
+	cell := readLeafCell(leafPage, elem.index)
+	return uint64((cell.Key << 16) | uint64(cell.firstValue(c.tx))), true, nil
+}
+
+func (c *Cursor) CountRange(start, end uint64) (uint64, error) {
+
+	if start >= end {
+		return 0, nil
+	}
+
+	skey := highbits(start)
+	ekey := highbits(end)
+	ebits := int32(lowbits(end))
+
+	csr := c
+	exact, err := csr.Seek(skey)
+	_ = exact
+	if err == io.EOF {
+		return 0, nil
+	} else if err != nil {
+		return 0, err
+	}
+	var n uint64
+	for {
+		if err := csr.Next(); err == io.EOF {
+			break
+		} else if err != nil {
+			return 0, err
+		}
+
+		elem := &csr.stack.elems[csr.stack.top]
+		leafPage, _, err := csr.tx.readPage(elem.pgno)
+		if err != nil {
+			return 0, err
+		}
+		c := readLeafCell(leafPage, elem.index)
+
+		k := c.Key
+		if k > ekey {
+			break
+		}
+
+		// If range is entirely in one container then just count that range.
+		if skey == ekey {
+			return uint64(c.countRange(csr.tx, int32(lowbits(start)), ebits)), nil
+		}
+		// INVAR: skey < ekey
+
+		// k > ekey handles the case when start > end and where start and end
+		// are in different containers. Same container case is already handled above.
+		if k > ekey {
+			break
+		}
+		if k == skey {
+			n += uint64(c.countRange(csr.tx, int32(lowbits(start)), roaring.MaxContainerVal+1))
+			continue
+		}
+		if k < ekey {
+			n += uint64(c.BitN)
+			continue
+		}
+		if k == ekey && ebits > 0 {
+			n += uint64(c.countRange(csr.tx, 0, ebits))
+			break
+		}
+	}
+	return n, nil
+}
+
+func (c *Cursor) OffsetRange(offset, start, endx uint64) (*roaring.Bitmap, error) {
+	if lowbits(offset) != 0 {
+		vprint.PanicOn("offset must not contain low bits")
+	} else if lowbits(start) != 0 {
+		vprint.PanicOn("range start must not contain low bits")
+	} else if lowbits(endx) != 0 {
+		vprint.PanicOn("range endx must not contain low bits")
+	}
+
+	other := roaring.NewSliceBitmap()
+	off := highbits(offset)
+	hi0, hi1 := highbits(start), highbits(endx)
+
+	if _, err := c.Seek(hi0); err == io.EOF {
+		return other, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	for {
+		if err := c.Next(); err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, err
+		}
+
+		elem := &c.stack.elems[c.stack.top]
+		leafPage, _, err := c.tx.readPage(elem.pgno)
+		if err != nil {
+			return nil, err
+		}
+		cell := readLeafCell(leafPage, elem.index)
+		ckey := cell.Key
+
+		// >= hi1 is correct b/c endx cannot have any lowbits set.
+		if ckey >= hi1 {
+			break
+		}
+		other.Containers.Put(off+(ckey-hi0), toContainer(cell, c.tx))
+	}
+	return other, nil
+}
 
 // probably should just implement the container interface
 // but for now i'll do it

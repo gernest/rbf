@@ -1355,17 +1355,16 @@ var containerFilterPool = &sync.Pool{}
 // getContainerFilter generates a containerFilter, which may actually secretly
 // be used for rewriting; the data structures are similar enough that sharing
 // a pool for both types seems advantageous.
-func getContainerFilter(c *Cursor, name string, filter roaring.BitmapFilter, rewriter roaring.BitmapRewriter, tx *Tx) *containerFilter {
+func (c *Cursor) getContainerFilter(filter roaring.BitmapFilter, rewriter roaring.BitmapRewriter) *containerFilter {
 	existing := containerFilterPool.Get()
 	if existing == nil {
-		return &containerFilter{cursor: c, name: name, filter: filter, rewriter: rewriter, tx: tx}
+		return &containerFilter{cursor: c, filter: filter, rewriter: rewriter, tx: c.tx}
 	}
 	f := existing.(*containerFilter)
 	f.cursor = c
-	f.name = name
 	f.filter = filter
 	f.rewriter = rewriter
-	f.tx = tx
+	f.tx = c.tx
 	return f
 }
 
@@ -1384,14 +1383,7 @@ func (tx *Tx) ApplyRewriter(name string, key uint64, rewriter roaring.BitmapRewr
 	} else if err != nil {
 		return err
 	}
-
-	_, err = c.Seek(key)
-	if err != nil {
-		return err
-	}
-	f := getContainerFilter(c, name, nil, rewriter, tx)
-	defer f.Close()
-	return f.ApplyRewriter()
+	return c.ApplyRewriter(key, rewriter)
 }
 
 func (tx *Tx) ApplyFilter(name string, key uint64, filter roaring.BitmapFilter) (err error) {
@@ -1404,14 +1396,7 @@ func (tx *Tx) ApplyFilter(name string, key uint64, filter roaring.BitmapFilter) 
 	} else if err != nil {
 		return err
 	}
-
-	_, err = c.Seek(key)
-	if err != nil {
-		return err
-	}
-	f := getContainerFilter(c, name, filter, nil, tx)
-	defer f.Close()
-	return f.ApplyFilter()
+	return c.ApplyFilter(key, filter)
 }
 
 func (tx *Tx) Count(name string) (uint64, error) {
@@ -1425,31 +1410,7 @@ func (tx *Tx) Count(name string) (uint64, error) {
 		return 0, err
 	}
 	defer c.Close()
-
-	if err := c.First(); err == io.EOF {
-		return 0, nil
-	} else if err != nil {
-		return 0, err
-	}
-
-	var n uint64
-	for {
-		if err := c.Next(); err == io.EOF {
-			break
-		} else if err != nil {
-			return 0, err
-		}
-
-		elem := &c.stack.elems[c.stack.top]
-		leafPage, _, err := c.tx.readPage(elem.pgno)
-		if err != nil {
-			return 0, err
-		}
-		cell := readLeafCell(leafPage, elem.index)
-
-		n += uint64(cell.BitN)
-	}
-	return n, nil
+	return c.Count()
 }
 
 func (tx *Tx) Max(name string) (uint64, error) {
@@ -1463,21 +1424,7 @@ func (tx *Tx) Max(name string) (uint64, error) {
 		return 0, err
 	}
 	defer c.Close()
-
-	if err := c.Last(); err == io.EOF {
-		return 0, nil
-	} else if err != nil {
-		return 0, err
-	}
-
-	elem := &c.stack.elems[c.stack.top]
-	leafPage, _, err := c.tx.readPage(elem.pgno)
-	if err != nil {
-		return 0, err
-	}
-	cell := readLeafCell(leafPage, elem.index)
-
-	return uint64((cell.Key << 16) | uint64(cell.lastValue(tx))), nil
+	return c.Max()
 }
 
 func (tx *Tx) Min(name string) (uint64, bool, error) {
@@ -1491,35 +1438,13 @@ func (tx *Tx) Min(name string) (uint64, bool, error) {
 		return 0, false, err
 	}
 	defer c.Close()
-
-	if err := c.First(); err == io.EOF {
-		return 0, false, nil
-	} else if err != nil {
-		return 0, false, err
-	}
-
-	elem := &c.stack.elems[c.stack.top]
-	leafPage, _, err := c.tx.readPage(elem.pgno)
-	if err != nil {
-		return 0, false, err
-	}
-	cell := readLeafCell(leafPage, elem.index)
-
-	return uint64((cell.Key << 16) | uint64(cell.firstValue(tx))), true, nil
+	return c.Min()
 }
 
 // roaring.countRange counts the number of bits set between [start, end).
 func (tx *Tx) CountRange(name string, start, end uint64) (uint64, error) {
 	tx.mu.RLock()
 	defer tx.mu.RUnlock()
-
-	if start >= end {
-		return 0, nil
-	}
-
-	skey := highbits(start)
-	ekey := highbits(end)
-	ebits := int32(lowbits(end))
 
 	csr, err := tx.cursor(name)
 	if err == ErrBitmapNotFound {
@@ -1528,69 +1453,10 @@ func (tx *Tx) CountRange(name string, start, end uint64) (uint64, error) {
 		return 0, err
 	}
 	defer csr.Close()
-
-	exact, err := csr.Seek(skey)
-	_ = exact
-	if err == io.EOF {
-		return 0, nil
-	} else if err != nil {
-		return 0, err
-	}
-	var n uint64
-	for {
-		if err := csr.Next(); err == io.EOF {
-			break
-		} else if err != nil {
-			return 0, err
-		}
-
-		elem := &csr.stack.elems[csr.stack.top]
-		leafPage, _, err := csr.tx.readPage(elem.pgno)
-		if err != nil {
-			return 0, err
-		}
-		c := readLeafCell(leafPage, elem.index)
-
-		k := c.Key
-		if k > ekey {
-			break
-		}
-
-		// If range is entirely in one container then just count that range.
-		if skey == ekey {
-			return uint64(c.countRange(tx, int32(lowbits(start)), ebits)), nil
-		}
-		// INVAR: skey < ekey
-
-		// k > ekey handles the case when start > end and where start and end
-		// are in different containers. Same container case is already handled above.
-		if k > ekey {
-			break
-		}
-		if k == skey {
-			n += uint64(c.countRange(tx, int32(lowbits(start)), roaring.MaxContainerVal+1))
-			continue
-		}
-		if k < ekey {
-			n += uint64(c.BitN)
-			continue
-		}
-		if k == ekey && ebits > 0 {
-			n += uint64(c.countRange(tx, 0, ebits))
-			break
-		}
-	}
-	return n, nil
+	return csr.CountRange(start, end)
 }
 
 func (tx *Tx) OffsetRange(name string, offset, start, endx uint64) (*roaring.Bitmap, error) {
-	if lowbits(offset) != 0 {
-		vprint.PanicOn("offset must not contain low bits")
-	} else if lowbits(start) != 0 {
-		vprint.PanicOn("range start must not contain low bits")
-	} else if lowbits(endx) != 0 {
-		vprint.PanicOn("range endx must not contain low bits")
-	}
 
 	tx.mu.RLock()
 	defer tx.mu.RUnlock()
@@ -1602,46 +1468,13 @@ func (tx *Tx) OffsetRange(name string, offset, start, endx uint64) (*roaring.Bit
 		return nil, err
 	}
 	defer c.Close()
-
-	other := roaring.NewSliceBitmap()
-	off := highbits(offset)
-	hi0, hi1 := highbits(start), highbits(endx)
-
-	if _, err := c.Seek(hi0); err == io.EOF {
-		return other, nil
-	} else if err != nil {
-		return nil, err
-	}
-
-	for {
-		if err := c.Next(); err == io.EOF {
-			break
-		} else if err != nil {
-			return nil, err
-		}
-
-		elem := &c.stack.elems[c.stack.top]
-		leafPage, _, err := c.tx.readPage(elem.pgno)
-		if err != nil {
-			return nil, err
-		}
-		cell := readLeafCell(leafPage, elem.index)
-		ckey := cell.Key
-
-		// >= hi1 is correct b/c endx cannot have any lowbits set.
-		if ckey >= hi1 {
-			break
-		}
-		other.Containers.Put(off+(ckey-hi0), toContainer(cell, tx))
-	}
-	return other, nil
+	return c.OffsetRange(offset, start, endx)
 }
 
 // containerFilter is like ContainerIterator, but implements ApplyFilter and
 // also ApplyRewriter, depending on which is provided to it.
 type containerFilter struct {
 	cursor   *Cursor
-	name     string
 	filter   roaring.BitmapFilter
 	rewriter roaring.BitmapRewriter
 	tx       *Tx
