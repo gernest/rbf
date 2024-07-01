@@ -8,5 +8,6 @@ import (
 type Tx struct {
 	Tx    *rbf.Tx
 	Shard uint64
+	View  string
 	Tr    *tr.Read
 }

@@ -36,6 +36,7 @@ func (s *Store[T]) View(start, end time.Time, f func(tx *tx.Tx) error) error {
 				return f(&tx.Tx{
 					Tx:    txn,
 					Shard: shard,
+					View:  view,
 					Tr:    tr,
 				})
 			})
