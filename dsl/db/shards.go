@@ -112,6 +112,30 @@ func (s *Shards) tx(shard uint64, update bool, f func(tx *rbf.Tx) error) error {
 	return tx.Commit()
 }
 
+func (s *Shards) View2(shard uint64, f func(tx *rbf.Tx, tr *tr.Read) error) error {
+	db, err := s.get(shard)
+	if err != nil {
+		return err
+	}
+	tx, err := db.db.Begin(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	r, err := db.tr.Read()
+	if err != nil {
+		return err
+	}
+	defer r.Release()
+
+	err = f(tx, r)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Shards) get(shard uint64) (*data, error) {
 	g, ok := s.shards.Load(shard)
 	if ok {

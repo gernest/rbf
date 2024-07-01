@@ -14,11 +14,13 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (s *Store[T]) process(ctx context.Context, data <-chan T) error {
+func (s *Store[T]) Process(ctx context.Context, data <-chan T) error {
 	w, err := s.write()
 	if err != nil {
 		return err
 	}
+	defer w.Release()
+
 	tick := time.NewTicker(time.Minute)
 	defer tick.Stop()
 
