@@ -97,12 +97,10 @@ func (w *writer[T]) append(e T) error {
 	if err != nil {
 		return err
 	}
-	if w.count != w.shard {
+	if w.current != w.shard {
 		if w.count != 0 {
 			// We have changed shards, save the last shard and reset state. Saving
 			// views is per time observed by the server.
-			//
-			// We do not assume T has
 			ts := w.ts
 			if ts.IsZero() {
 				ts = time.Now()
