@@ -2,10 +2,14 @@ package dsl
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/gernest/rbf"
 	"github.com/gernest/rbf/dsl/schema"
 	"github.com/gernest/rbf/dsl/tr"
+	"github.com/gernest/rbf/quantum"
+	"github.com/gernest/roaring"
 	"github.com/gernest/roaring/shardwidth"
 )
 
@@ -38,15 +42,31 @@ func (s *Store[T]) process(ctx context.Context, data <-chan T) error {
 		shard = nxt / shardwidth.ShardWidth
 		return nxt, nil
 	}
-	save := func(_ time.Time) error {
+	save := func(ts time.Time) error {
 		if count == 0 {
 			return nil
 		}
 		defer func() {
 			count = 0
+			ox.tx.Rollback()
 			ox = nil
 		}()
-		return nil
+		err = ox.tx.Commit()
+		if err != nil {
+			return err
+		}
+		view := quantum.ViewByTimeUnit("", ts, 'D')
+		err = s.shards.Update(currentShard, func(tx *rbf.Tx) error {
+			return schema.Range(func(name string, r *roaring.Bitmap) error {
+				key := fmt.Sprintf("~%s;%s<", name, view)
+				_, err := tx.AddRoaring(key, r)
+				return err
+			})
+		})
+		if err != nil {
+			return err
+		}
+		return ox.Commit(currentShard, view)
 	}
 
 	tick := time.NewTicker(time.Minute)
