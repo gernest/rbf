@@ -9,7 +9,7 @@ import (
 	"github.com/gernest/roaring/shardwidth"
 )
 
-func (s *Store[T]) process(ctx context.Context, o *Ops, data <-chan T) error {
+func (s *Store[T]) process(ctx context.Context, data <-chan T) error {
 	schema, err := schema.NewSchema[T](nil)
 	if err != nil {
 		return err
@@ -27,7 +27,7 @@ func (s *Store[T]) process(ctx context.Context, o *Ops, data <-chan T) error {
 		if ox != nil {
 			return ox.NextID()
 		}
-		ox, err = o.ops()
+		ox, err = s.ops.ops()
 		if err != nil {
 			return 0, err
 		}
