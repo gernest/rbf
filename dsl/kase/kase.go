@@ -58,6 +58,24 @@ func (k *Kase[T]) TestSelect() {
 	k.Require().Equal(want, got)
 }
 
+func (k *Kase[T]) TestSelectAll() {
+	keys := make([]uint64, 0, len(k.Source))
+	want := map[uint64]T{}
+	for i := range k.Source {
+		want[uint64(i)] = k.Source[i]
+		keys = append(keys, uint64(i))
+	}
+	got := map[uint64]T{}
+	k.view(func(c *rbf.Cursor) {
+		err := k.Extract(c, 0, rows.NewRow(keys...), func(column uint64, value T) error {
+			got[column] = value
+			return nil
+		})
+		k.Require().NoError(err)
+	})
+	k.Require().Equal(want, got)
+}
+
 func (k *Kase[T]) view(f func(c *rbf.Cursor)) {
 	tx, err := k.db.Begin(false)
 	k.Require().NoError(err)

@@ -40,9 +40,13 @@ func Add(m *roaring.Bitmap, id uint64, svalue int64) {
 
 // Extract finds all values set in exists columns and calls f with the
 // found column and value.
-//
-// Assumes exists columns  are in the bitmap.
-func Extract(c *rbf.Cursor, shard uint64, exists *rows.Row, f func(column uint64, value uint64) error) error {
+func Extract(c *rbf.Cursor, shard uint64, columns *rows.Row, f func(column uint64, value int64) error) error {
+	exists, err := cursor.Row(c, shard, bsiExistsBit)
+	if err != nil {
+		return err
+	}
+	exists = exists.Intersect(columns)
+
 	data := make(map[uint64]uint64)
 	mergeBits(exists, 0, data)
 	bitDepth, err := depth(c)
@@ -67,29 +71,12 @@ func Extract(c *rbf.Cursor, shard uint64, exists *rows.Row, f func(column uint64
 	for columnID, val := range data {
 		// Convert to two's complement and add base back to value.
 		val = uint64((2*(int64(val)>>63) + 1) * int64(val&^(1<<63)))
-		err := f(columnID, val)
+		err := f(columnID, int64(val))
 		if err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-// ExtractValidate is like ExtractValuesBSI but checks if columns exists.
-func ExtractValidate(c *rbf.Cursor, shard uint64, columns *rows.Row, f func(column, value uint64) error) error {
-	exists, err := cursor.Row(c, shard, bsiExistsBit)
-	if err != nil {
-		return err
-	}
-	if columns != nil {
-		exists = exists.Intersect(columns)
-	}
-	if !exists.Any() {
-		// No relevant BSI values are present in this fragment.
-		return nil
-	}
-
-	return Extract(c, shard, exists, f)
 }
 
 func mergeBits(bits *rows.Row, mask uint64, out map[uint64]uint64) {
