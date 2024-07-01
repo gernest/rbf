@@ -36,7 +36,7 @@ func (s *Store[T]) process(ctx context.Context, data <-chan T) error {
 			return 0, err
 		}
 		shard = nxt / shardwidth.ShardWidth
-		return ox.NextID()
+		return nxt, nil
 	}
 	save := func(_ time.Time) error {
 		if count == 0 {
