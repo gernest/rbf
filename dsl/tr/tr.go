@@ -4,13 +4,15 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/cespare/xxhash/v2"
 	"go.etcd.io/bbolt"
 )
 
 var (
-	keys = []byte("keys")
-	ids  = []byte("ids")
-	seq  = []byte("seq")
+	keys     = []byte("keys")
+	ids      = []byte("ids")
+	seq      = []byte("seq")
+	blobHash = []byte("blob_hash")
 )
 
 type File struct {
@@ -33,6 +35,10 @@ func (f *File) Open() error {
 			return err
 		}
 		_, err = tx.CreateBucketIfNotExists(ids)
+		if err != nil {
+			return err
+		}
+		_, err = tx.CreateBucketIfNotExists(blobHash)
 		if err != nil {
 			return err
 		}
@@ -61,18 +67,20 @@ func (f *File) Write() (*Write, error) {
 		return nil, err
 	}
 	return &Write{
-		tx:   tx,
-		keys: tx.Bucket(keys),
-		ids:  tx.Bucket(ids),
-		seq:  tx.Bucket(seq),
+		tx:    tx,
+		keys:  tx.Bucket(keys),
+		ids:   tx.Bucket(ids),
+		blobs: tx.Bucket(blobHash),
+		seq:   tx.Bucket(seq),
 	}, nil
 }
 
 type Write struct {
-	tx   *bbolt.Tx
-	keys *bbolt.Bucket
-	ids  *bbolt.Bucket
-	seq  *bbolt.Bucket
+	tx    *bbolt.Tx
+	keys  *bbolt.Bucket
+	ids   *bbolt.Bucket
+	blobs *bbolt.Bucket
+	seq   *bbolt.Bucket
 }
 
 func (w *Write) Release() error {
@@ -81,6 +89,14 @@ func (w *Write) Release() error {
 
 func (w *Write) Commit() error {
 	return w.tx.Commit()
+}
+
+func (w *Write) Blob(field string, data []byte) uint64 {
+	next, err := w.blob(field, data)
+	if err != nil {
+		panic(err)
+	}
+	return next
 }
 
 func (w *Write) Tr(field string, key []byte) uint64 {
@@ -115,6 +131,22 @@ func (w *Write) tr(field string, key []byte) (uint64, error) {
 		return 0, fmt.Errorf("ebf/tr: writing key %w", err)
 	}
 	return next, nil
+}
+
+func (w *Write) blob(field string, data []byte) (uint64, error) {
+	hash := xxhash.Sum64(data)
+	var id [8]byte
+	binary.BigEndian.PutUint64(id[:], hash)
+	full := append([]byte(field), id[:]...)
+	value := w.blobs.Get(full)
+	if value != nil {
+		return hash, nil
+	}
+	err := w.blobs.Put(full, data)
+	if err != nil {
+		return 0, fmt.Errorf("ebf/tr: writing blob data %w", err)
+	}
+	return hash, nil
 }
 
 func (f *File) Read() (*Read, error) {

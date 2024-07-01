@@ -7,34 +7,30 @@ import (
 	"github.com/gernest/rbf/dsl/boolean"
 	"github.com/gernest/rbf/dsl/bsi"
 	"github.com/gernest/rbf/dsl/mutex"
+	"github.com/gernest/rbf/dsl/tr"
 	"github.com/gernest/roaring"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-type Translator interface {
-	Tr(field string, data []byte) uint64
-}
-
 // Schema maps proto fields to rbf types.
 type Schema[T proto.Message] struct {
 	batch   map[protoreflect.FieldNumber]*roaring.Bitmap
 	writers map[protoreflect.FieldNumber]batchWriterFunc
 	msg     protoreflect.MessageDescriptor
-	tr      Translator
+	tr      *tr.Write
 }
 
-func NewSchema[T proto.Message](tr Translator) (*Schema[T], error) {
+func NewSchema[T proto.Message](tr *tr.Write) (*Schema[T], error) {
 	var a T
-	w, err := setup(a, tr)
-	if err != nil {
-		return nil, err
-	}
-	return &Schema[T]{tr: tr, msg: a.ProtoReflect().Descriptor(), batch: make(map[protowire.Number]*roaring.Bitmap), writers: w}, nil
+	s := &Schema[T]{tr: tr, msg: a.ProtoReflect().Descriptor(),
+		batch:   make(map[protowire.Number]*roaring.Bitmap),
+		writers: make(map[protowire.Number]batchWriterFunc)}
+	return s, s.setup(a)
 }
 
-func (s *Schema[T]) Reset(tr Translator) {
+func (s *Schema[T]) Reset(tr *tr.Write) {
 	clear(s.batch)
 	s.tr = tr
 }
@@ -70,8 +66,7 @@ func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 
 type batchWriterFunc func(r *roaring.Bitmap, id uint64, value protoreflect.Value) error
 
-func setup(msg proto.Message, tr Translator) (map[protoreflect.FieldNumber]batchWriterFunc, error) {
-	o := make(map[protoreflect.FieldNumber]batchWriterFunc)
+func (s *Schema[T]) setup(msg proto.Message) error {
 	fields := msg.ProtoReflect().Descriptor().Fields()
 	for i := 0; i < fields.Len(); i++ {
 		f := fields.Get(i)
@@ -105,27 +100,27 @@ func setup(msg proto.Message, tr Translator) (map[protoreflect.FieldNumber]batch
 				return nil
 			}
 		case protoreflect.StringKind:
-			fn = str(string(f.Name()), tr)
+			fn = s.str(string(f.Name()))
 		case protoreflect.BytesKind:
-			fn = bytes(string(f.Name()), tr)
+			fn = s.bytes(string(f.Name()))
 		default:
-			return nil, fmt.Errorf("%s is not supported", f.Kind())
+			return fmt.Errorf("%s is not supported", f.Kind())
 		}
-		o[f.Number()] = fn
+		s.writers[f.Number()] = fn
 	}
-	return o, nil
+	return nil
 }
 
-func str(n string, tr Translator) batchWriterFunc {
+func (s *Schema[T]) str(n string) batchWriterFunc {
 	return func(r *roaring.Bitmap, id uint64, value protoreflect.Value) error {
-		bsi.Add(r, id, int64(tr.Tr(n, []byte(value.String()))))
+		bsi.Add(r, id, int64(s.tr.Tr(n, []byte(value.String()))))
 		return nil
 	}
 }
 
-func bytes(n string, tr Translator) batchWriterFunc {
+func (s *Schema[T]) bytes(n string) batchWriterFunc {
 	return func(r *roaring.Bitmap, id uint64, value protoreflect.Value) error {
-		bsi.Add(r, id, int64(tr.Tr(n, value.Bytes())))
+		bsi.Add(r, id, int64(s.tr.Blob(n, value.Bytes())))
 		return nil
 	}
 }
