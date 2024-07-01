@@ -83,7 +83,15 @@ func (w *Write) Commit() error {
 	return w.tx.Commit()
 }
 
-func (w *Write) Tr(field string, key []byte) (uint64, error) {
+func (w *Write) Tr(field string, key []byte) uint64 {
+	next, err := w.tr(field, key)
+	if err != nil {
+		panic(err)
+	}
+	return next
+}
+
+func (w *Write) tr(field string, key []byte) (uint64, error) {
 	full := append([]byte(field), key...)
 	value := w.keys.Get(full)
 	if value != nil {

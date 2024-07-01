@@ -34,8 +34,9 @@ func NewSchema[T proto.Message](tr Translator) (*Schema[T], error) {
 	return &Schema[T]{tr: tr, msg: a.ProtoReflect().Descriptor(), batch: make(map[protowire.Number]*roaring.Bitmap), writers: w}, nil
 }
 
-func (s *Schema[T]) Reset() {
+func (s *Schema[T]) Reset(tr Translator) {
 	clear(s.batch)
+	s.tr = tr
 }
 
 func (s *Schema[T]) Range(f func(name string, r *roaring.Bitmap) error) error {
