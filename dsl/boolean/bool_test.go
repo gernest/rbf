@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-func TestBoolean(t *testing.T) {
+func TestBoolean_extract(t *testing.T) {
 	suite.Run(t, &kase.Kase[bool]{
 		Add:     Add,
 		Extract: Extract,
