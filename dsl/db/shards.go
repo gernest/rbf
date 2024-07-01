@@ -2,20 +2,21 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gernest/rbf"
-	"github.com/gernest/rbf/cfg"
+	"github.com/gernest/rbf/dsl/tr"
 )
 
 type Shards struct {
 	placement sync.Map
 	shards    sync.Map
-	config    cfg.Config
 	retention time.Duration
 	interval  time.Duration
 	log       *slog.Logger
@@ -24,9 +25,7 @@ type Shards struct {
 }
 
 func New(path string) *Shards {
-	config := cfg.NewDefaultConfig()
 	return &Shards{
-		config:    *config,
 		retention: 24 * time.Hour,
 		interval:  time.Minute,
 		log:       slog.Default().With("component", "rbf/db"),
@@ -81,32 +80,44 @@ func (s *Shards) Update(shard uint64, f func(tx *rbf.Tx) error) error {
 	return s.tx(shard, true, f)
 }
 
+func (s *Shards) TrWrite(shard uint64) (*tr.Write, error) {
+	db, err := s.get(shard)
+	if err != nil {
+		return nil, err
+	}
+	return db.tr.Write()
+}
+
+func (s *Shards) TrRead(shard uint64) (*tr.Read, error) {
+	db, err := s.get(shard)
+	if err != nil {
+		return nil, err
+	}
+	return db.tr.Read()
+}
+
 func (s *Shards) tx(shard uint64, update bool, f func(tx *rbf.Tx) error) error {
 	db, err := s.get(shard)
 	if err != nil {
 		return err
 	}
-	tx, err := db.Begin(update)
+	tx, err := db.db.Begin(update)
 	if err != nil {
 		return err
 	}
 	err = f(tx)
 	if err != nil {
-		tx.Rollback()
 		return err
 	}
-	if update {
-		return tx.Commit()
-	}
-	tx.Rollback()
-	return nil
+	return tx.Commit()
 }
 
-func (s *Shards) get(shard uint64) (*rbf.DB, error) {
+func (s *Shards) get(shard uint64) (*data, error) {
 	g, ok := s.shards.Load(shard)
 	if ok {
-		db := g.(*rbf.DB)
-		if db.IsClosed() {
+		db := g.(*data)
+
+		if !db.IsOpen() {
 			err := db.Open()
 			if err != nil {
 				return nil, fmt.Errorf("rbf/db: reopening closed shard %w", err)
@@ -120,9 +131,7 @@ func (s *Shards) get(shard uint64) (*rbf.DB, error) {
 	}
 	// Guarantee only one thread gets to create anew shard
 	s.mu.Lock()
-	config := s.config
-	path := filepath.Join(s.path, fmt.Sprintf("%06d", shard))
-	db := rbf.NewDB(path, &config)
+	db := newData(s.path, shard)
 	err := db.Open()
 	if err != nil {
 		s.mu.Unlock()
@@ -139,4 +148,48 @@ func (s *Shards) get(shard uint64) (*rbf.DB, error) {
 type placement struct {
 	expires time.Time
 	db      *rbf.DB
+}
+
+type data struct {
+	db   *rbf.DB
+	tr   *tr.File
+	open atomic.Bool
+}
+
+func newData(path string, shard uint64) *data {
+	fullDB := filepath.Join(path, "rbf", fmt.Sprintf("%06d", shard))
+	fullTR := filepath.Join(fullDB, "TRANSLATE")
+	return &data{
+		db: rbf.NewDB(fullDB, nil),
+		tr: tr.New(fullTR),
+	}
+}
+
+func (d *data) IsOpen() bool {
+	return d.open.Load()
+}
+
+func (d *data) Open() error {
+	if d.IsOpen() {
+		return nil
+	}
+	err := d.db.Open()
+	if err != nil {
+		return err
+	}
+	err = d.tr.Open()
+	if err != nil {
+		d.db.Close()
+		return err
+	}
+	d.open.Store(true)
+	return nil
+}
+
+func (d *data) Close() error {
+	if !d.IsOpen() {
+		return nil
+	}
+	defer d.open.Store(false)
+	return errors.Join(d.db.Close(), d.tr.Close())
 }
