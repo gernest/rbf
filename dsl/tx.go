@@ -6,16 +6,11 @@ import (
 
 	"github.com/gernest/rbf"
 	"github.com/gernest/rbf/dsl/tr"
+	"github.com/gernest/rbf/dsl/tx"
 	"github.com/gernest/rbf/quantum"
 )
 
-type Tx struct {
-	Tx    *rbf.Tx
-	Shard uint64
-	Tr    *tr.Read
-}
-
-func (s *Store[T]) View(start, end time.Time, f func(tx *Tx) error) error {
+func (s *Store[T]) View(start, end time.Time, f func(tx *tx.Tx) error) error {
 	var views []string
 	if date(start).Equal(date(end)) {
 		views = []string{quantum.ViewByTimeUnit("", start, 'D')}
@@ -37,9 +32,9 @@ func (s *Store[T]) View(start, end time.Time, f func(tx *Tx) error) error {
 
 		for k, _ := cursor.First(); k != nil; k, _ = cursor.Next() {
 			shard := binary.BigEndian.Uint64(k)
-			err := s.shards.View2(shard, func(tx *rbf.Tx, tr *tr.Read) error {
-				return f(&Tx{
-					Tx:    tx,
+			err := s.shards.View2(shard, func(txn *rbf.Tx, tr *tr.Read) error {
+				return f(&tx.Tx{
+					Tx:    txn,
 					Shard: shard,
 					Tr:    tr,
 				})
