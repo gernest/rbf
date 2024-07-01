@@ -9,7 +9,7 @@ import (
 
 type Add[T any] func(r *roaring.Bitmap, id uint64, value T)
 
-type Extract[T any] func(c *rbf.Cursor, shard uint64, columns *rows.Row, f func(column uint64, value T)) error
+type Extract[T any] func(c *rbf.Cursor, shard uint64, columns *rows.Row, f func(column uint64, value T) error) error
 
 type Kase[T any] struct {
 	suite.Suite
@@ -49,8 +49,9 @@ func (k *Kase[T]) TestSelect() {
 	}
 	got := map[uint64]T{}
 	k.view(func(c *rbf.Cursor) {
-		err := k.Extract(c, 0, rows.NewRow(1, 3), func(column uint64, value T) {
+		err := k.Extract(c, 0, rows.NewRow(1, 3), func(column uint64, value T) error {
 			got[column] = value
+			return nil
 		})
 		k.Require().NoError(err)
 	})

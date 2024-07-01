@@ -26,7 +26,7 @@ func Add(m *roaring.Bitmap, id uint64, value bool) {
 	}
 }
 
-func Extract(c *rbf.Cursor, shard uint64, columns *rows.Row, f func(column uint64, value bool)) error {
+func Extract(c *rbf.Cursor, shard uint64, columns *rows.Row, f func(column uint64, value bool) error) error {
 	trueRow, err := cursor.Row(c, shard, trueRowID)
 	if err != nil {
 		return err
@@ -39,10 +39,11 @@ func Extract(c *rbf.Cursor, shard uint64, columns *rows.Row, f func(column uint6
 	return columns.RangeColumns(func(u uint64) error {
 		switch {
 		case trueRow.Includes(u):
-			f(u, true)
+			return f(u, true)
 		case falseRow.Includes(u):
-			f(u, false)
+			return f(u, false)
+		default:
+			return nil
 		}
-		return nil
 	})
 }
