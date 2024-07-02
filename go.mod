@@ -16,6 +16,9 @@ require (
 )
 
 require (
+	github.com/bits-and-blooms/bitset v1.2.0 // indirect
+	github.com/blevesearch/mmap-go v1.0.4 // indirect
+	github.com/blevesearch/vellum v1.0.10 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/pprof v0.0.0-20240227163752-401108e1b7e7 // indirect
 	github.com/molecula/apophenia v0.0.0-20190827192002-68b7a14a478b // indirect
