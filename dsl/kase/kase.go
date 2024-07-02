@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+//go:generate protoc -I=. --go_out=. --go_opt=paths=source_relative msg.proto
+
 type Add[T any] func(r *roaring.Bitmap, id uint64, value T)
 
 type Extract[T any] func(c *rbf.Cursor, shard uint64, columns *rows.Row, f func(column uint64, value T) error) error

@@ -1,0 +1,22 @@
+syntax = "proto3";
+package kase;
+
+option go_package = "github.com/gernest/rbf/dsl/kase";
+
+message Mutex {
+  Enum mutex = 1;
+  enum Enum {
+    zero = 0;
+    one = 1;
+  }
+}
+
+message BSI {
+  int64 int = 1;
+  double double = 2;
+}
+
+message Bool { bool bool = 1; }
+message String { bool string = 1; }
+message Blob { bytes blob = 1; }
+message Map { map<string, string> blob = 1; }
