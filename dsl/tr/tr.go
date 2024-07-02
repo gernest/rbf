@@ -14,7 +14,7 @@ var (
 	keys     = []byte("keys")
 	ids      = []byte("ids")
 	seq      = []byte("seq")
-	blobHash = []byte("blob_hash")
+	blobHash = []byte("hash")
 	fst      = []byte("fst")
 )
 
