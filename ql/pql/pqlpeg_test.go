@@ -7,8 +7,6 @@ import (
 	"reflect"
 	"strconv"
 	"testing"
-
-	"github.com/pkg/errors"
 )
 
 func TestPEG(t *testing.T) {
@@ -16,7 +14,7 @@ func TestPEG(t *testing.T) {
 SetBit(Union(Zitmap(row==4), Intersect(Qitmap(blah>4), Ritmap(field="http://zoo9.com=\\'hello' and \"hello\"")), Hitmap(row=ag-bee)), a="4z", b=5) Count(Union(Witmap(row=5.73, frame=.10), Row(zztop><[2, 9]))) TopN(blah, fields=["hello", "goodbye", "zero"])`[1:]}
 	err := p.Init()
 	if err != nil {
-		t.Fatal(errors.Wrap(err, "creating parser"))
+		t.Fatal(fmt.Errorf("creating parser %w", err))
 	}
 	err = p.Parse()
 	if err != nil {

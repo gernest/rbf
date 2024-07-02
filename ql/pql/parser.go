@@ -8,8 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/pkg/errors"
 )
 
 // error strings in the parser
@@ -41,18 +39,18 @@ func ParseString(s string) (*Query, error) {
 func (p *parser) Parse() (*Query, error) {
 	buf, err := io.ReadAll(p.r)
 	if err != nil {
-		return nil, errors.Wrap(err, "reading buffer to parse")
+		return nil, fmt.Errorf("reading buffer to parse %w", err)
 	}
 	p.PQL = PQL{
 		Buffer: string(buf),
 	}
 	err = p.Init()
 	if err != nil {
-		return nil, errors.Wrap(err, "creating parser")
+		return nil, fmt.Errorf("creating parser %w", err)
 	}
 	err = p.PQL.Parse()
 	if err != nil {
-		return nil, errors.Wrap(err, "parsing")
+		return nil, fmt.Errorf("parsing %w", err)
 	}
 
 	// Handle specific panics from the parser and return them as errors.

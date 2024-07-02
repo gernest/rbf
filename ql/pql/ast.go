@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 // Query represents a PQL query.
@@ -864,7 +862,7 @@ func (c *Call) UintSliceArg(key string) ([]uint64, bool, error) {
 			} else if iv, ok := v.(int64); ok && iv >= 0 {
 				ret[i] = uint64(iv)
 			} else {
-				return nil, true, errors.Errorf("'%v' at position %d is %[1]T, but need positive integer", v, i)
+				return nil, true, fmt.Errorf("'%v' at position %d is %[1]T, but need positive integer", v, i)
 			}
 		}
 		return ret, true, nil

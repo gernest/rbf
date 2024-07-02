@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
+	"errors"
 )
 
 // pow10 is a map used to avoid the float64 required by math.Pow10()
@@ -421,7 +421,7 @@ func ParseDecimal(s string) (Decimal, error) {
 				if decimalPos == -1 {
 					decimalPos = pos
 				} else {
-					return Decimal{}, errors.Errorf("invalid decimal string: %s", s)
+					return Decimal{}, fmt.Errorf("invalid decimal string: %s", s)
 				}
 				continue
 			default:
@@ -470,7 +470,7 @@ func ParseDecimal(s string) (Decimal, error) {
 		mantissa = m
 		scale = s
 	} else {
-		return Decimal{}, errors.Errorf("value out of range: %s", mantissa)
+		return Decimal{}, fmt.Errorf("value out of range: %s", mantissa)
 	}
 	// We have to use ParseUint here (as opposed to ParseInt) because
 	// math.MinInt64 is a valid value, but its absolute value is not.
@@ -478,7 +478,7 @@ func ParseDecimal(s string) (Decimal, error) {
 	// then we check for the uint bounds in the next step.
 	uvalue, err := strconv.ParseUint(string(mantissa), 10, 64)
 	if err != nil {
-		return Decimal{}, errors.Wrap(err, "converting mantissa string to uint64")
+		return Decimal{}, fmt.Errorf("converting mantissa string to uint64 %w", err)
 	}
 
 	if (sign && uvalue > -1*math.MinInt64) || (!sign && uvalue > math.MaxInt64) {
@@ -546,7 +546,7 @@ func reducePrecision(sign bool, mantissa []byte, scale int64) ([]byte, int64, bo
 func (d *Decimal) UnmarshalJSON(data []byte) error {
 	o, err := ParseDecimal(string(data))
 	if err != nil {
-		return errors.Wrapf(err, "parsing decimal: %s", string(data))
+		return fmt.Errorf("parsing decimal: %s %w", string(data), err)
 	}
 	d.value = o.value
 	d.Scale = o.Scale
@@ -569,7 +569,7 @@ func (d *Decimal) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	o, err := ParseDecimal(data)
 	if err != nil {
-		return errors.Wrapf(err, "parsing decimal: %s", data)
+		return fmt.Errorf("parsing decimal: %s %w", data, err)
 	}
 	d.value = o.value
 	d.Scale = o.Scale
