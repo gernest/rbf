@@ -5,7 +5,7 @@ package planner
 import (
 	"context"
 
-	"github.com/gernest/rbf/api"
+	"github.com/gernest/rbf/ql/api"
 	"github.com/gernest/rbf/ql/core"
 )
 

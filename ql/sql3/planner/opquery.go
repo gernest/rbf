@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gernest/rbf/api"
+	"github.com/gernest/rbf/ql/api"
 	"github.com/gernest/rbf/ql/qtx"
 	"github.com/gernest/rbf/ql/sql3"
 	"github.com/gernest/rbf/ql/sql3/planner/types"
