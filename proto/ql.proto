@@ -1,0 +1,69 @@
+
+syntax = "proto3";
+package proto;
+
+option go_package = "github.com/gernest/rbf/proto";
+
+message QueryPQLRequest {
+  string index = 1;
+  string pql = 2;
+}
+
+message QuerySQLRequest { string sql = 1; }
+
+message StatusError {
+  uint32 Code = 1;
+  string Message = 2;
+}
+
+message RowResponse {
+  repeated ColumnInfo headers = 1;
+  repeated ColumnResponse columns = 2;
+  StatusError StatusError = 3;
+  int64 duration = 4;
+}
+
+message Row { repeated ColumnResponse columns = 1; }
+
+message TableResponse {
+  repeated ColumnInfo headers = 1;
+  repeated Row rows = 2;
+  StatusError StatusError = 3;
+  int64 duration = 4;
+}
+
+message ColumnInfo {
+  string name = 1;
+  string datatype = 2;
+}
+
+message ColumnResponse {
+  oneof columnVal {
+    string stringVal = 1;
+    uint64 uint64Val = 2;
+    int64 int64Val = 3;
+    bool boolVal = 4;
+    bytes blobVal = 5;
+    Uint64Array uint64ArrayVal = 6;
+    StringArray stringArrayVal = 7;
+    double float64Val = 8;
+    Decimal decimalVal = 9;
+    string timestampVal = 10;
+  }
+}
+
+message Decimal {
+  int64 value = 1;
+  int64 scale = 2;
+}
+
+message Uint64Array { repeated uint64 vals = 1; }
+
+message StringArray { repeated string vals = 1; }
+
+message IdsOrKeys {
+  oneof type {
+    Uint64Array ids = 1;
+    StringArray keys = 2;
+  }
+}

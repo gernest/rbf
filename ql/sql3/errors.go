@@ -1,6 +1,7 @@
 package sql3
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 
@@ -158,6 +159,29 @@ const (
 	ErrUnknownShowOption Code = "ErrUnknownShowOption"
 )
 
+const (
+	ErrOrganizationIDDoesNotExist Code = "OrganizationIDDoesNotExist"
+
+	ErrDatabaseIDExists         Code = "DatabaseIDExists"
+	ErrDatabaseIDDoesNotExist   Code = "DatabaseIDDoesNotExist"
+	ErrDatabaseNameDoesNotExist Code = "DatabaseNameDoesNotExist"
+	ErrDatabaseNameExists       Code = "DatabaseNameExists"
+
+	ErrTableIDExists         Code = "TableIDExists"
+	ErrTableKeyExists        Code = "TableKeyExists"
+	ErrTableNameExists       Code = "TableNameExists"
+	ErrTableIDDoesNotExist   Code = "TableIDDoesNotExist"
+	ErrTableKeyDoesNotExist  Code = "TableKeyDoesNotExist"
+	ErrTableNameDoesNotExist Code = "TableNameDoesNotExist"
+
+	ErrFieldExists       Code = "FieldExists"
+	ErrFieldDoesNotExist Code = "FieldDoesNotExist"
+
+	ErrInvalidTransaction Code = "InvalidTransaction"
+
+	ErrUnimplemented Code = "Unimplemented"
+)
+
 type codedError struct {
 	Code    Code   `json:"code"`
 	Message string `json:"message"`
@@ -169,6 +193,22 @@ func (ce codedError) Error() string {
 		return ce.Wrapped
 	}
 	return ce.Message
+}
+
+func (ce codedError) Is(err error) bool {
+	if e, ok := err.(codedError); ok && ce.Code == e.Code {
+		return true
+	}
+	return false
+}
+
+// Is is a fork of the Is() method from `pkg/errors` which takes as its target
+// an error Code instead of an error.
+func Is(err error, target Code) bool {
+	match := codedError{
+		Code: target,
+	}
+	return errors.Is(err, match)
 }
 
 func NewErrDuplicateColumn(line int, col int, column string) error {

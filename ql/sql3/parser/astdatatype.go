@@ -4,19 +4,19 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gernest/rbf/ql/sql3/types"
+	"github.com/gernest/rbf/ql/core"
 )
 
 func IsValidTypeName(typeName string) bool {
 	switch strings.ToLower(typeName) {
-	case types.BaseTypeBool,
-		types.BaseTypeDecimal,
-		types.BaseTypeID,
-		types.BaseTypeIDSet,
-		types.BaseTypeInt,
-		types.BaseTypeString,
-		types.BaseTypeStringSet,
-		types.BaseTypeTimestamp:
+	case core.BaseTypeBool,
+		core.BaseTypeDecimal,
+		core.BaseTypeID,
+		core.BaseTypeIDSet,
+		core.BaseTypeInt,
+		core.BaseTypeString,
+		core.BaseTypeStringSet,
+		core.BaseTypeTimestamp:
 		return true
 	default:
 		return false
@@ -165,7 +165,7 @@ func NewDataTypeBool() *DataTypeBool {
 }
 
 func (*DataTypeBool) BaseTypeName() string {
-	return types.BaseTypeBool
+	return core.BaseTypeBool
 }
 
 func (dt *DataTypeBool) TypeDescription() string {
@@ -187,11 +187,11 @@ func NewDataTypeDecimal(scale int64) *DataTypeDecimal {
 }
 
 func (d *DataTypeDecimal) BaseTypeName() string {
-	return types.BaseTypeDecimal
+	return core.BaseTypeDecimal
 }
 
 func (d *DataTypeDecimal) TypeDescription() string {
-	return fmt.Sprintf("%s(%d)", types.BaseTypeDecimal, d.Scale)
+	return fmt.Sprintf("%s(%d)", core.BaseTypeDecimal, d.Scale)
 }
 
 func (d *DataTypeDecimal) TypeInfo() map[string]interface{} {
@@ -208,7 +208,7 @@ func NewDataTypeID() *DataTypeID {
 }
 
 func (*DataTypeID) BaseTypeName() string {
-	return types.BaseTypeID
+	return core.BaseTypeID
 }
 
 func (dt *DataTypeID) TypeDescription() string {
@@ -227,7 +227,7 @@ func NewDataTypeIDSet() *DataTypeIDSet {
 }
 
 func (*DataTypeIDSet) BaseTypeName() string {
-	return types.BaseTypeIDSet
+	return core.BaseTypeIDSet
 }
 
 func (dt *DataTypeIDSet) TypeDescription() string {
@@ -246,7 +246,7 @@ func NewDataTypeIDSetQuantum() *DataTypeIDSetQuantum {
 }
 
 func (*DataTypeIDSetQuantum) BaseTypeName() string {
-	return types.BaseTypeIDSetQ
+	return core.BaseTypeIDSetQ
 }
 
 func (dt *DataTypeIDSetQuantum) TypeDescription() string {
@@ -265,7 +265,7 @@ func NewDataTypeInt() *DataTypeInt {
 }
 
 func (*DataTypeInt) BaseTypeName() string {
-	return types.BaseTypeInt
+	return core.BaseTypeInt
 }
 
 func (dt *DataTypeInt) TypeDescription() string {
@@ -284,7 +284,7 @@ func NewDataTypeString() *DataTypeString {
 }
 
 func (*DataTypeString) BaseTypeName() string {
-	return types.BaseTypeString
+	return core.BaseTypeString
 }
 
 func (dt *DataTypeString) TypeDescription() string {
@@ -303,7 +303,7 @@ func NewDataTypeStringSet() *DataTypeStringSet {
 }
 
 func (*DataTypeStringSet) BaseTypeName() string {
-	return types.BaseTypeStringSet
+	return core.BaseTypeStringSet
 }
 
 func (dt *DataTypeStringSet) TypeDescription() string {
@@ -322,7 +322,7 @@ func NewDataTypeStringSetQuantum() *DataTypeStringSetQuantum {
 }
 
 func (*DataTypeStringSetQuantum) BaseTypeName() string {
-	return types.BaseTypeStringSetQ
+	return core.BaseTypeStringSetQ
 }
 
 func (dt *DataTypeStringSetQuantum) TypeDescription() string {
@@ -341,7 +341,7 @@ func NewDataTypeTimestamp() *DataTypeTimestamp {
 }
 
 func (*DataTypeTimestamp) BaseTypeName() string {
-	return types.BaseTypeTimestamp
+	return core.BaseTypeTimestamp
 }
 
 func (dt *DataTypeTimestamp) TypeDescription() string {

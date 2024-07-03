@@ -21,6 +21,8 @@ import (
 	"github.com/gernest/roaring/shardwidth"
 )
 
+//go:generate protoc -I=./proto --go_out=./proto --go_opt=paths=source_relative ./proto/ql.proto
+
 const (
 	// Magic is the first 4 bytes of the RBF file.
 	Magic = "\xFFRBF"
