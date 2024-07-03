@@ -37,6 +37,38 @@ func newOps(path string) (*Ops, error) {
 	return &Ops{db: db}, nil
 }
 
+func (o *Ops) read() (*readOps, error) {
+	tx, err := o.db.Begin(false)
+	if err != nil {
+		return nil, err
+	}
+	return &readOps{
+		tx:    tx,
+		views: tx.Bucket(viewsBucket),
+	}, nil
+}
+
+type readOps struct {
+	tx    *bbolt.Tx
+	views *bbolt.Bucket
+}
+
+func (r *readOps) Release() error {
+	return r.tx.Rollback()
+}
+
+// Shards returns all shards for the given view.
+func (r *readOps) Shards(view string) (o []uint64) {
+	b := r.views.Bucket([]byte(view))
+	if b != nil {
+		b.ForEach(func(k, _ []byte) error {
+			o = append(o, binary.BigEndian.Uint64(k))
+			return nil
+		})
+	}
+	return
+}
+
 func (o *Ops) write() (*writeOps, error) {
 	tx, err := o.db.Begin(true)
 	if err != nil {
