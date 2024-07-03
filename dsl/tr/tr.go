@@ -134,6 +134,10 @@ func (w *Write) vellum() error {
 			return err
 		}
 		err = w.keys.Bucket(k).ForEach(func(k, v []byte) error {
+			if bytes.Equal(k, emptyKey) {
+				// skip empty keys
+				return nil
+			}
 			return b.Insert(k, binary.BigEndian.Uint64(v))
 		})
 		if err != nil {
