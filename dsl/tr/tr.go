@@ -3,6 +3,7 @@ package tr
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 
 	"github.com/blevesearch/vellum"
@@ -283,23 +284,24 @@ func (r *Read) Blob(field string, id uint64) []byte {
 	return ids.Get(b[:])
 }
 
-func (r *Read) Search(field string, a vellum.Automaton, start, end []byte) ([]uint64, error) {
+func (r *Read) Search(field string, a vellum.Automaton, start, end []byte, match func(key []byte, value uint64)) error {
 	b := r.fst.Get([]byte(field))
 	if b == nil {
-		return []uint64{}, nil
+		return nil
 	}
 	fst, err := vellum.Load(b)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	var result []uint64
 	it, err := fst.Search(a, start, end)
 	for err == nil {
-		_, value := it.Current()
-		result = append(result, value)
+		match(it.Current())
 		err = it.Next()
 	}
-	return result, nil
+	if err != nil && !errors.Is(err, vellum.ErrIteratorDone) {
+		return err
+	}
+	return err
 }
 
 func bucket(b *bbolt.Bucket, key []byte) (*bbolt.Bucket, error) {
