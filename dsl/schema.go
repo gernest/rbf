@@ -221,7 +221,7 @@ func (s *Schema[T]) setup(msg proto.Message) error {
 			}
 		case protoreflect.BytesKind:
 			fn = func(r *roaring.Bitmap, tr *tr.Write, field string, id uint64, value protoreflect.Value) error {
-				bsi.Add(r, id, int64(tr.Blob(field, value.Bytes())))
+				mutex.Add(r, id, tr.Blob(field, value.Bytes()))
 				return nil
 			}
 		default:

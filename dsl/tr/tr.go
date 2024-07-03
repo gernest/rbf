@@ -13,8 +13,8 @@ import (
 var (
 	keys     = []byte("keys")
 	ids      = []byte("ids")
-	seq      = []byte("seq")
-	blobHash = []byte("hash")
+	blobHash = []byte("blob_hash")
+	blobID   = []byte("blob_id")
 	fst      = []byte("fst")
 )
 
@@ -45,11 +45,11 @@ func (f *File) Open() error {
 		if err != nil {
 			return err
 		}
-		_, err = tx.CreateBucketIfNotExists(fst)
+		_, err = tx.CreateBucketIfNotExists(blobID)
 		if err != nil {
 			return err
 		}
-		_, err = tx.CreateBucketIfNotExists(seq)
+		_, err = tx.CreateBucketIfNotExists(fst)
 		return err
 	})
 	if err != nil {
@@ -74,23 +74,23 @@ func (f *File) Write() (*Write, error) {
 		return nil, err
 	}
 	return &Write{
-		tx:      tx,
-		keys:    tx.Bucket(keys),
-		ids:     tx.Bucket(ids),
-		blobs:   tx.Bucket(blobHash),
-		seq:     tx.Bucket(seq),
-		fst:     tx.Bucket(fst),
-		touched: make(map[string]struct{}),
+		tx:       tx,
+		keys:     tx.Bucket(keys),
+		ids:      tx.Bucket(ids),
+		blobID:   tx.Bucket(blobID),
+		blobHash: tx.Bucket(blobHash),
+		fst:      tx.Bucket(fst),
+		touched:  make(map[string]struct{}),
 	}, nil
 }
 
 type Write struct {
-	tx    *bbolt.Tx
-	keys  *bbolt.Bucket
-	ids   *bbolt.Bucket
-	blobs *bbolt.Bucket
-	seq   *bbolt.Bucket
-	fst   *bbolt.Bucket
+	tx       *bbolt.Tx
+	keys     *bbolt.Bucket
+	ids      *bbolt.Bucket
+	blobID   *bbolt.Bucket
+	blobHash *bbolt.Bucket
+	fst      *bbolt.Bucket
 
 	// tracks updated fields. Helps to avoid building fst for fields that were
 	// never updated.
@@ -156,17 +156,19 @@ func (w *Write) Tr(field string, key []byte) uint64 {
 }
 
 func (w *Write) tr(field string, key []byte) (uint64, error) {
-	keys, exists, err := w.bucket(w.keys, []byte(field))
+	keys, err := bucket(w.keys, []byte(field))
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("ebf/tr: setup keys bucket %w", err)
 	}
-	if exists {
-		// fast path: hey already translated.
-		if value := keys.Get(key); value != nil {
-			return binary.BigEndian.Uint64(value), nil
-		}
+	// fast path: hey already translated.
+	if value := keys.Get(key); value != nil {
+		return binary.BigEndian.Uint64(value), nil
 	}
-	next, err := w.seq.NextSequence()
+	ids, err := bucket(w.ids, []byte(field))
+	if err != nil {
+		return 0, fmt.Errorf("ebf/tr: setup ids bucket %w", err)
+	}
+	next, err := ids.NextSequence()
 	if err != nil {
 		return 0, fmt.Errorf("ebf/tr: getting seq id %w", err)
 	}
@@ -177,10 +179,7 @@ func (w *Write) tr(field string, key []byte) (uint64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("ebf/tr: writing key %w", err)
 	}
-
-	fullID := append([]byte(field), b[:]...)
-
-	err = w.ids.Put(fullID, key)
+	err = ids.Put(b[:], key)
 	if err != nil {
 		return 0, fmt.Errorf("ebf/tr: writing key %w", err)
 	}
@@ -188,29 +187,41 @@ func (w *Write) tr(field string, key []byte) (uint64, error) {
 	return next, nil
 }
 
-func (w *Write) bucket(b *bbolt.Bucket, key []byte) (*bbolt.Bucket, bool, error) {
-	g := b.Bucket(key)
-	if g != nil {
-		return g, true, nil
-	}
-	g, err := b.CreateBucket(key)
-	return g, false, err
-}
-
-func (w *Write) blob(field string, data []byte) (uint64, error) {
-	hash := xxhash.Sum64(data)
-	var id [8]byte
-	binary.BigEndian.PutUint64(id[:], hash)
-	full := append([]byte(field), id[:]...)
-	value := w.blobs.Get(full)
-	if value != nil {
-		return hash, nil
-	}
-	err := w.blobs.Put(full, data)
+func (w *Write) blob(field string, key []byte) (uint64, error) {
+	keys, err := bucket(w.blobHash, []byte(field))
 	if err != nil {
-		return 0, fmt.Errorf("ebf/tr: writing blob data %w", err)
+		return 0, fmt.Errorf("ebf/tr: setup blob keys bucket %w", err)
 	}
-	return hash, nil
+	hash := xxhash.Sum64(key)
+
+	var hk [8]byte
+	binary.BigEndian.PutUint64(hk[:], hash)
+
+	// fast path: hey already translated.
+	if value := keys.Get(hk[:]); value != nil {
+		return binary.BigEndian.Uint64(value), nil
+	}
+	ids, err := bucket(w.blobID, []byte(field))
+	if err != nil {
+		return 0, fmt.Errorf("ebf/tr: setup blob ids bucket %w", err)
+	}
+	next, err := ids.NextSequence()
+	if err != nil {
+		return 0, fmt.Errorf("ebf/tr: getting seq id %w", err)
+	}
+	var b [8]byte
+	binary.BigEndian.PutUint64(b[:], next)
+
+	err = keys.Put(hk[:], b[:])
+	if err != nil {
+		return 0, fmt.Errorf("ebf/tr: writing blob key %w", err)
+	}
+	err = ids.Put(b[:], key)
+	if err != nil {
+		return 0, fmt.Errorf("ebf/tr: writing blob id %w", err)
+	}
+	w.touched[field] = struct{}{}
+	return next, nil
 }
 
 func (f *File) Read() (*Read, error) {
@@ -223,7 +234,7 @@ func (f *File) Read() (*Read, error) {
 		keys: tx.Bucket(keys),
 		ids:  tx.Bucket(ids),
 		fst:  tx.Bucket(fst),
-		blob: tx.Bucket(blobHash),
+		blob: tx.Bucket(blobID),
 	}, nil
 }
 
@@ -240,10 +251,13 @@ func (r *Read) Release() error {
 }
 
 func (r *Read) Key(field string, id uint64) []byte {
+	ids := r.ids.Bucket([]byte(field))
+	if ids == nil {
+		return nil
+	}
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], id)
-	fullID := append([]byte(field), b[:]...)
-	return r.ids.Get(fullID)
+	return ids.Get(b[:])
 }
 
 func (r *Read) Find(field string, key []byte) (uint64, bool) {
@@ -260,10 +274,13 @@ func (r *Read) Find(field string, key []byte) (uint64, bool) {
 
 // Blob returns data stored for blob id.
 func (r *Read) Blob(field string, id uint64) []byte {
+	ids := r.blob.Bucket([]byte(field))
+	if ids == nil {
+		return nil
+	}
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], id)
-	full := append([]byte(field), b[:]...)
-	return r.blob.Get(full)
+	return ids.Get(b[:])
 }
 
 func (r *Read) Search(field string, a vellum.Automaton, start, end []byte) ([]uint64, error) {
@@ -283,4 +300,11 @@ func (r *Read) Search(field string, a vellum.Automaton, start, end []byte) ([]ui
 		err = it.Next()
 	}
 	return result, nil
+}
+
+func bucket(b *bbolt.Bucket, key []byte) (*bbolt.Bucket, error) {
+	if v := b.Bucket(key); v != nil {
+		return v, nil
+	}
+	return b.CreateBucket(key)
 }
