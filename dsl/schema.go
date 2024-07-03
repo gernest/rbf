@@ -79,6 +79,7 @@ type Schema[T proto.Message] struct {
 	writers    Writers
 	writes     Writes
 	views      TimeRange
+	allShards  *roaring.Bitmap
 	fields     protoreflect.FieldDescriptors
 	timeFormat func(value protoreflect.Value) time.Time
 }
@@ -91,6 +92,7 @@ func (s *Store[T]) Schema() (*Schema[T], error) {
 		shards:     make(Shards),
 		writers:    make(Writers),
 		views:      make(TimeRange),
+		allShards:  roaring.NewBitmap(),
 		fields:     a.ProtoReflect().Descriptor().Fields(),
 	}
 	return st, st.setup(a)
@@ -103,7 +105,7 @@ func (s *Schema[T]) Commit() (err error) {
 			err = x
 		}
 	}
-	if x := s.ops.Commit(s.views); x != nil {
+	if x := s.ops.Commit(s.allShards, s.views); x != nil {
 		err = x
 	}
 	return
@@ -122,6 +124,7 @@ func (s *Schema[T]) Release() (err error) {
 	clear(s.writes)
 	clear(s.shards)
 	clear(s.views)
+	s.allShards = roaring.NewBitmap()
 	s.ops = nil
 	return
 }
@@ -192,6 +195,9 @@ func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 	if tsField != nil {
 		view := s.timeFormat(msg.Get(tsField)).Format("20060102")
 		s.views.Set(view, shard)
+	}
+	if !s.allShards.Contains(shard) {
+		s.allShards.DirectAdd(shard)
 	}
 	fields := s.shards.get(shard).get(StandardView)
 	tr, err := s.tr(shard)

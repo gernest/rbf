@@ -59,6 +59,16 @@ func (r *readOps) Release() error {
 	return r.tx.Rollback()
 }
 
+func (r *readOps) All() (o []uint64) {
+	data := r.views.Get([]byte{0})
+	if data != nil {
+		r := roaring.NewBitmap()
+		r.UnmarshalBinary(data)
+		o = r.Slice()
+	}
+	return
+}
+
 // Shards returns all shards for the given view.
 func (r *readOps) Shards(view string) (o []uint64) {
 	data := r.views.Get([]byte(view))
@@ -113,7 +123,7 @@ func (o *writeOps) Release() error {
 	return o.tx.Rollback()
 }
 
-func (o *writeOps) Commit(m map[string]*roaring.Bitmap) error {
+func (o *writeOps) Commit(all *roaring.Bitmap, m map[string]*roaring.Bitmap) error {
 	defer o.tx.Rollback()
 
 	for view, shards := range m {
@@ -133,6 +143,22 @@ func (o *writeOps) Commit(m map[string]*roaring.Bitmap) error {
 		if err != nil {
 			return fmt.Errorf("put shards bitmap %w", err)
 		}
+	}
+	if data := o.views.Get([]byte{0}); data != nil {
+		r := roaring.NewBitmap()
+		err := r.UnmarshalBinary(data)
+		if err != nil {
+			return fmt.Errorf("reading shards bitmap %w", err)
+		}
+		all.IntersectInPlace(r)
+	}
+	data, err := all.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("marshal all shards bitmap %w", err)
+	}
+	err = o.views.Put([]byte{0}, data)
+	if err != nil {
+		return fmt.Errorf("put all shards bitmap %w", err)
 	}
 	return o.tx.Commit()
 }
