@@ -1,9 +1,11 @@
 package dsl
 
 import (
-	"encoding/binary"
+	"bytes"
+	"fmt"
 	"path/filepath"
 
+	"github.com/gernest/roaring"
 	"go.etcd.io/bbolt"
 )
 
@@ -59,13 +61,26 @@ func (r *readOps) Release() error {
 
 // Shards returns all shards for the given view.
 func (r *readOps) Shards(view string) (o []uint64) {
-	b := r.views.Bucket([]byte(view))
-	if b != nil {
-		b.ForEach(func(k, _ []byte) error {
-			o = append(o, binary.BigEndian.Uint64(k))
-			return nil
-		})
+	data := r.views.Get([]byte(view))
+	if data != nil {
+		r := roaring.NewBitmap()
+		r.UnmarshalBinary(data)
+		o = r.Slice()
 	}
+	return
+}
+
+// ShardsRange returns all shards found in range. Range is inclusive.
+func (r *readOps) ShardsRange(from, to string) (o []uint64) {
+	c := r.views.Cursor()
+	b := roaring.NewBitmap()
+	last := []byte(to)
+	for k, v := c.Seek([]byte(from)); bytes.Compare(k, last) <= 0; k, v = c.Next() {
+		r := roaring.NewBitmap()
+		r.UnmarshalBinary(v)
+		b.UnionInPlace(r)
+	}
+	o = b.Slice()
 	return
 }
 
@@ -98,21 +113,25 @@ func (o *writeOps) Release() error {
 	return o.tx.Rollback()
 }
 
-func (o *writeOps) Commit(m map[string][]uint64) error {
+func (o *writeOps) Commit(m map[string]*roaring.Bitmap) error {
 	defer o.tx.Rollback()
 
 	for view, shards := range m {
-		vb, err := o.views.CreateBucketIfNotExists([]byte(view))
-		if err != nil {
-			return err
-		}
-		for _, shard := range shards {
-			var b [8]byte
-			binary.BigEndian.PutUint64(b[:], shard)
-			err = vb.Put(b[:], []byte{})
+		if data := o.views.Get([]byte(view)); data != nil {
+			r := roaring.NewBitmap()
+			err := r.UnmarshalBinary(data)
 			if err != nil {
-				return err
+				return fmt.Errorf("reading shards bitmap %w", err)
 			}
+			shards.IntersectInPlace(r)
+		}
+		data, err := shards.MarshalBinary()
+		if err != nil {
+			return fmt.Errorf("marshal shards bitmap %w", err)
+		}
+		err = o.views.Put([]byte(view), data)
+		if err != nil {
+			return fmt.Errorf("put shards bitmap %w", err)
 		}
 	}
 	return o.tx.Commit()

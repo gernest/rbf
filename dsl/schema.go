@@ -16,6 +16,10 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
+const (
+	StandardView = "standard"
+)
+
 type Fields map[string]*roaring.Bitmap
 
 func (f Fields) get(id string) *roaring.Bitmap {
@@ -40,6 +44,20 @@ func (v Views) get(id string) Fields {
 
 type Shards map[uint64]Views
 
+type TimeRange map[string]*roaring.Bitmap
+
+func (t TimeRange) Set(view string, shard uint64) {
+	r, ok := t[view]
+	if !ok {
+		r = roaring.NewBitmap(shard)
+		t[view] = r
+		return
+	}
+	if !r.Contains(shard) {
+		r.DirectAdd(shard)
+	}
+}
+
 func (s Shards) get(id uint64) Views {
 	a, ok := s[id]
 	if !ok {
@@ -60,6 +78,8 @@ type Schema[T proto.Message] struct {
 	shards     Shards
 	writers    Writers
 	writes     Writes
+	views      TimeRange
+	fields     protoreflect.FieldDescriptors
 	timeFormat func(value protoreflect.Value) time.Time
 }
 
@@ -70,16 +90,21 @@ func (s *Store[T]) Schema() (*Schema[T], error) {
 		timeFormat: Millisecond,
 		shards:     make(Shards),
 		writers:    make(Writers),
+		views:      make(TimeRange),
+		fields:     a.ProtoReflect().Descriptor().Fields(),
 	}
 	return st, st.setup(a)
 }
 
-func (s *Schema[T]) Commit(m map[string][]uint64) (err error) {
+func (s *Schema[T]) Commit() (err error) {
 	for _, t := range s.writes {
 		x := t.Commit()
 		if x != nil {
 			err = x
 		}
+	}
+	if x := s.ops.Commit(s.views); x != nil {
+		err = x
 	}
 	return
 }
@@ -96,6 +121,7 @@ func (s *Schema[T]) Release() (err error) {
 	}
 	clear(s.writes)
 	clear(s.shards)
+	clear(s.views)
 	s.ops = nil
 	return
 }
@@ -160,13 +186,14 @@ func (s *Schema[T]) Write(msg T) error {
 const TimestampField = protoreflect.Name("timestamp")
 
 func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
-	tsField := msg.Descriptor().Fields().ByName(TimestampField)
-	if tsField == nil {
-		return fmt.Errorf("timestamp field is required")
-	}
-	view := s.timeFormat(msg.Get(tsField)).Format("20060102")
+
 	shard := id / shardwidth.ShardWidth
-	fields := s.shards.get(shard).get(view)
+	tsField := msg.Descriptor().Fields().ByName(TimestampField)
+	if tsField != nil {
+		view := s.timeFormat(msg.Get(tsField)).Format("20060102")
+		s.views.Set(view, shard)
+	}
+	fields := s.shards.get(shard).get(StandardView)
 	tr, err := s.tr(shard)
 	if err != nil {
 		return err
@@ -234,11 +261,9 @@ func (s *Schema[T]) setup(msg proto.Message) error {
 
 func (s *Schema[T]) Save() error {
 	defer s.Release()
-	m := map[string][]uint64{}
 	err := s.Range(func(shard uint64, views Views) error {
 		return s.store.shards.Update(shard, func(tx *rbf.Tx) error {
 			for view, fields := range views {
-				m[view] = append(m[view], shard)
 				for field, data := range fields {
 					key := ViewKey(field, view)
 					_, err := tx.AddRoaring(key, data)
@@ -253,5 +278,5 @@ func (s *Schema[T]) Save() error {
 	if err != nil {
 		return err
 	}
-	return s.Commit(m)
+	return s.Commit()
 }
