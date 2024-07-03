@@ -74,6 +74,27 @@ func TestTr(t *testing.T) {
 	})
 }
 
+func TestTr_empty(t *testing.T) {
+	f := New(filepath.Join(t.TempDir(), "translate"))
+	require.NoError(t, f.Open())
+	defer f.Close()
+	w, err := f.Write()
+	require.NoError(t, err)
+	defer w.Commit()
+	field := "string"
+	id, err := w.tr(field, []byte(""))
+	require.NoError(t, err)
+
+	require.Equal(t, uint64(1), id)
+
+	require.NoError(t, w.Commit())
+
+	r, err := f.Read()
+	require.NoError(t, err)
+	defer r.Release()
+	require.Empty(t, r.Key(field, id))
+}
+
 func TestBlob(t *testing.T) {
 	f := New(filepath.Join(t.TempDir(), "translate"))
 	require.NoError(t, f.Open())

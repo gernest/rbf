@@ -18,6 +18,14 @@ var (
 	fst      = []byte("fst")
 )
 
+var emptyKey = []byte{
+	0x00, 0x00, 0x00,
+	0x4d, 0x54, 0x4d, 0x54, // MTMT
+	0x00,
+	0xc2, 0xa0, // NO-BREAK SPACE
+	0x00,
+}
+
 type File struct {
 	db   *bbolt.DB
 	path string
@@ -156,6 +164,9 @@ func (w *Write) Tr(field string, key []byte) uint64 {
 }
 
 func (w *Write) tr(field string, key []byte) (uint64, error) {
+	if len(key) == 0 {
+		key = emptyKey
+	}
 	keys, err := bucket(w.keys, []byte(field))
 	if err != nil {
 		return 0, fmt.Errorf("ebf/tr: setup keys bucket %w", err)
@@ -188,6 +199,9 @@ func (w *Write) tr(field string, key []byte) (uint64, error) {
 }
 
 func (w *Write) blob(field string, key []byte) (uint64, error) {
+	if len(key) == 0 {
+		key = emptyKey
+	}
 	keys, err := bucket(w.blobHash, []byte(field))
 	if err != nil {
 		return 0, fmt.Errorf("ebf/tr: setup blob keys bucket %w", err)
@@ -257,10 +271,20 @@ func (r *Read) Key(field string, id uint64) []byte {
 	}
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], id)
-	return ids.Get(b[:])
+	return get(ids.Get(b[:]))
+}
+
+func get(key []byte) []byte {
+	if bytes.Equal(key, emptyKey) {
+		return []byte{}
+	}
+	return key
 }
 
 func (r *Read) Find(field string, key []byte) (uint64, bool) {
+	if len(key) == 0 {
+		key = emptyKey
+	}
 	keys := r.keys.Bucket([]byte(field))
 	if keys == nil {
 		return 0, false
@@ -280,7 +304,7 @@ func (r *Read) Blob(field string, id uint64) []byte {
 	}
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], id)
-	return ids.Get(b[:])
+	return get(ids.Get(b[:]))
 }
 
 func (r *Read) Search(field string, a vellum.Automaton, start, end []byte, match func(key []byte, value uint64)) error {
