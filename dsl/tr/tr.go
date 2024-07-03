@@ -3,7 +3,6 @@ package tr
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 
 	"github.com/blevesearch/vellum"
@@ -298,10 +297,7 @@ func (r *Read) Search(field string, a vellum.Automaton, start, end []byte, match
 		match(it.Current())
 		err = it.Next()
 	}
-	if err != nil && !errors.Is(err, vellum.ErrIteratorDone) {
-		return err
-	}
-	return err
+	return nil
 }
 
 func bucket(b *bbolt.Bucket, key []byte) (*bbolt.Bucket, error) {
