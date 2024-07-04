@@ -10,6 +10,7 @@ import (
 	"github.com/gernest/rbf/dsl/bsi"
 	"github.com/gernest/rbf/dsl/mutex"
 	"github.com/gernest/rbf/dsl/tr"
+	"github.com/gernest/rbf/quantum"
 	"github.com/gernest/roaring"
 	"github.com/gernest/roaring/shardwidth"
 	"google.golang.org/protobuf/proto"
@@ -45,20 +46,6 @@ func (v Views) get(id string) Fields {
 
 type Shards map[uint64]Views
 
-type TimeRange map[string]*roaring.Bitmap
-
-func (t TimeRange) Set(view string, shard uint64) {
-	r, ok := t[view]
-	if !ok {
-		r = roaring.NewBitmap(shard)
-		t[view] = r
-		return
-	}
-	if !r.Contains(shard) {
-		r.DirectAdd(shard)
-	}
-}
-
 func (s Shards) get(id uint64) Views {
 	a, ok := s[id]
 	if !ok {
@@ -68,7 +55,7 @@ func (s Shards) get(id uint64) Views {
 	return a
 }
 
-type Writers map[string]batchWriterFunc
+type Writers map[string]writeFn
 
 // Schema maps proto fields to rbf types.
 type Schema[T proto.Message] struct {
@@ -76,11 +63,10 @@ type Schema[T proto.Message] struct {
 	ops            *writeOps
 	shards         Shards
 	writers        Writers
-	views          TimeRange
-	allShards      *roaring.Bitmap
 	fields         protoreflect.FieldDescriptors
 	timeFormat     func(value protoreflect.Value) time.Time
 	timestampField protoreflect.Name
+	views          []string
 }
 
 func (s *Store[T]) Schema() (*Schema[T], error) {
@@ -90,16 +76,14 @@ func (s *Store[T]) Schema() (*Schema[T], error) {
 		timeFormat:     Millisecond,
 		shards:         make(Shards),
 		writers:        make(Writers),
-		views:          make(TimeRange),
-		allShards:      roaring.NewBitmap(),
 		fields:         a.ProtoReflect().Descriptor().Fields(),
 		timestampField: "timestamp",
 	}
 	return st, st.setup(a)
 }
 
-func (s *Schema[T]) Commit() error {
-	return s.ops.Commit(s.allShards, s.views)
+func (s *Schema[T]) Commit(m map[string]*roaring.Bitmap) error {
+	return s.ops.Commit(m)
 }
 
 func (s *Schema[T]) Release() (err error) {
@@ -107,8 +91,6 @@ func (s *Schema[T]) Release() (err error) {
 		err = x
 	}
 	clear(s.shards)
-	clear(s.views)
-	s.allShards = roaring.NewBitmap()
 	s.ops = nil
 	return
 }
@@ -161,29 +143,32 @@ func (s *Schema[T]) Write(msg T) error {
 func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 	shard := id / shardwidth.ShardWidth
 	tsField := msg.Descriptor().Fields().ByName(s.timestampField)
+	s.views = append(s.views[:0], StandardView)
 	if tsField != nil {
-		view := s.timeFormat(msg.Get(tsField)).Format(Quantum)
-		s.views.Set(view, shard)
+		ts := s.timeFormat(msg.Get(tsField))
+		s.views = append(s.views, quantum.ViewByTimeUnit(StandardView, ts, 'D'))
 	}
-	if !s.allShards.Contains(shard) {
-		s.allShards.DirectAdd(shard)
-	}
-	fields := s.shards.get(shard).get(StandardView)
+	vs := s.shards.get(shard)
 	msg.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 		name := string(fd.Name())
-		err = s.writers[name](fields.get(name), s.ops.tr, name, id, v)
-		return err == nil
+		for _, view := range s.views {
+			err = s.writers[name](vs.get(view).get(name), s.ops.tr, name, id, v)
+			if err != nil {
+				return false
+			}
+		}
+		return true
 	})
 	return
 }
 
-type batchWriterFunc func(r *roaring.Bitmap, tr *tr.Write, field string, id uint64, value protoreflect.Value) error
+type writeFn func(r *roaring.Bitmap, tr *tr.Write, field string, id uint64, value protoreflect.Value) error
 
 func (s *Schema[T]) setup(msg proto.Message) error {
 	fields := msg.ProtoReflect().Descriptor().Fields()
 	for i := 0; i < fields.Len(); i++ {
 		f := fields.Get(i)
-		var fn batchWriterFunc
+		var fn writeFn
 		if f.IsList() {
 			// only []string  and [][]byte is supported
 			switch f.Kind() {
@@ -255,9 +240,19 @@ func (s *Schema[T]) setup(msg proto.Message) error {
 
 func (s *Schema[T]) Save() error {
 	defer s.Release()
+	m := map[string]*roaring.Bitmap{}
 	err := s.Range(func(shard uint64, views Views) error {
 		return s.store.shards.Update(shard, func(tx *rbf.Tx) error {
 			for view, fields := range views {
+				b, ok := m[view]
+				if !ok {
+					b = roaring.NewBitmap(shard)
+					m[view] = b
+				} else {
+					if !b.Contains(shard) {
+						b.DirectAdd(shard)
+					}
+				}
 				for field, data := range fields {
 					key := ViewKey(field, view)
 					_, err := tx.AddRoaring(key, data)
@@ -272,5 +267,5 @@ func (s *Schema[T]) Save() error {
 	if err != nil {
 		return err
 	}
-	return s.Commit()
+	return s.Commit(m)
 }

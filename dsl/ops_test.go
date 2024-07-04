@@ -15,7 +15,7 @@ func TestOps(t *testing.T) {
 	w, err := o.write()
 	require.NoError(t, err)
 
-	require.NoError(t, w.Commit(roaring.NewBitmap(1, 2, 3), map[string]*roaring.Bitmap{
+	require.NoError(t, w.Commit(map[string]*roaring.Bitmap{
 		"test": roaring.NewBitmap(1, 2, 3),
 		"1":    roaring.NewBitmap(1),
 		"2":    roaring.NewBitmap(2),

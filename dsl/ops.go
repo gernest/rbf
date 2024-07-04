@@ -149,7 +149,7 @@ func (o *writeOps) Release() error {
 	return errors.Join(o.tx.Rollback(), o.tr.Release())
 }
 
-func (o *writeOps) Commit(all *roaring.Bitmap, m map[string]*roaring.Bitmap) error {
+func (o *writeOps) Commit(m map[string]*roaring.Bitmap) error {
 	defer o.Release()
 
 	for view, shards := range m {
@@ -169,22 +169,6 @@ func (o *writeOps) Commit(all *roaring.Bitmap, m map[string]*roaring.Bitmap) err
 		if err != nil {
 			return fmt.Errorf("put shards bitmap %w", err)
 		}
-	}
-	if data := o.views.Get([]byte{0}); data != nil {
-		r := roaring.NewBitmap()
-		err := r.UnmarshalBinary(data)
-		if err != nil {
-			return fmt.Errorf("reading shards bitmap %w", err)
-		}
-		all.IntersectInPlace(r)
-	}
-	data, err := all.MarshalBinary()
-	if err != nil {
-		return fmt.Errorf("marshal all shards bitmap %w", err)
-	}
-	err = o.views.Put([]byte{0}, data)
-	if err != nil {
-		return fmt.Errorf("put all shards bitmap %w", err)
 	}
 	return errors.Join(o.tx.Commit(), o.tr.Commit())
 }

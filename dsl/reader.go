@@ -11,6 +11,7 @@ import (
 	"github.com/gernest/rbf/dsl/cursor"
 	"github.com/gernest/rbf/dsl/query"
 	"github.com/gernest/rbf/dsl/tr"
+	"github.com/gernest/rbf/quantum"
 	"github.com/gernest/roaring"
 	"github.com/gernest/roaring/shardwidth"
 	"google.golang.org/protobuf/proto"
@@ -43,17 +44,17 @@ func (r *Reader[T]) Rows(field string, opts *RowsOption) (query.IDs, error) {
 	default:
 		return nil, fmt.Errorf("field %v does not support Rows", f.Kind())
 	}
-	var shards []uint64
+	views := []string{StandardView}
 	if opts != nil && !opts.From.IsZero() && !opts.To.IsZero() {
-		shards = r.ops.ShardsRange(opts.From.Format(Quantum), opts.To.Format(Quantum))
-	} else {
-		shards = r.ops.All()
+		views = quantum.ViewsByTimeRange(StandardView, opts.From, opts.To, quantum.TimeQuantum("D"))
 	}
 	o := roaring64.New()
-	for _, shard := range shards {
-		err := r.rowsShards(f, shard, o, opts)
-		if err != nil {
-			return nil, err
+	for _, view := range views {
+		for _, shard := range r.ops.Shards(view) {
+			err := r.rowsShards(f, shard, o, opts)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	limit := uint64(math.MaxUint64)
