@@ -219,19 +219,17 @@ func (s *Schema[T]) setup(msg proto.Message) error {
 				mutex.Add(r, id, uint64(value.Enum()))
 				return nil
 			}
-		case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind,
-			protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
+		case protoreflect.Int64Kind:
 			fn = func(r *roaring.Bitmap, _ *tr.Write, _ string, id uint64, value protoreflect.Value) error {
 				bsi.Add(r, id, value.Int())
 				return nil
 			}
-		case protoreflect.Uint32Kind, protoreflect.Fixed32Kind,
-			protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
+		case protoreflect.Uint64Kind:
 			fn = func(r *roaring.Bitmap, _ *tr.Write, _ string, id uint64, value protoreflect.Value) error {
 				bsi.Add(r, id, int64(value.Uint()))
 				return nil
 			}
-		case protoreflect.DoubleKind, protoreflect.FloatKind:
+		case protoreflect.DoubleKind:
 			fn = func(r *roaring.Bitmap, _ *tr.Write, _ string, id uint64, value protoreflect.Value) error {
 				bsi.Add(r, id, int64(math.Float64bits(value.Float())))
 				return nil
