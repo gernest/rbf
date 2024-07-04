@@ -183,6 +183,31 @@ func (s *Schema[T]) setup(msg proto.Message) error {
 	for i := 0; i < fields.Len(); i++ {
 		f := fields.Get(i)
 		var fn batchWriterFunc
+		if f.IsList() {
+			// only []string  and [][]byte is supported
+			switch f.Kind() {
+			case protoreflect.StringKind:
+				fn = func(r *roaring.Bitmap, tr *tr.Write, field string, id uint64, value protoreflect.Value) error {
+					ls := value.List()
+					for n := 0; n < ls.Len(); n++ {
+						mutex.Add(r, id, tr.Tr(field, []byte(ls.Get(n).String())))
+					}
+					return nil
+				}
+			case protoreflect.BytesKind:
+				fn = func(r *roaring.Bitmap, tr *tr.Write, field string, id uint64, value protoreflect.Value) error {
+					ls := value.List()
+					for n := 0; n < ls.Len(); n++ {
+						mutex.Add(r, id, tr.Blob(field, ls.Get(n).Bytes()))
+					}
+					return nil
+				}
+			default:
+				return fmt.Errorf("%s is not supported", f.Kind())
+			}
+			s.writers[string(f.Name())] = fn
+			continue
+		}
 		switch f.Kind() {
 		case protoreflect.BoolKind:
 			fn = func(r *roaring.Bitmap, _ *tr.Write, _ string, id uint64, value protoreflect.Value) error {
