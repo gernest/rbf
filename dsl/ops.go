@@ -1,10 +1,10 @@
 package dsl
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 
 	"github.com/gernest/rbf/dsl/tr"
 	"github.com/gernest/roaring"
@@ -79,16 +79,6 @@ func (r *readOps) Release() error {
 	return errors.Join(r.tx.Rollback(), r.tr.Release())
 }
 
-func (r *readOps) All() (o []uint64) {
-	data := r.views.Get([]byte{0})
-	if data != nil {
-		r := roaring.NewBitmap()
-		r.UnmarshalBinary(data)
-		o = r.Slice()
-	}
-	return
-}
-
 // Shards returns all shards for the given view.
 func (r *readOps) Shards(view string) (o []uint64) {
 	data := r.views.Get([]byte(view))
@@ -100,18 +90,27 @@ func (r *readOps) Shards(view string) (o []uint64) {
 	return
 }
 
-// ShardsRange returns all shards found in range. Range is inclusive.
-func (r *readOps) ShardsRange(from, to string) (o []uint64) {
-	c := r.views.Cursor()
-	b := roaring.NewBitmap()
-	last := []byte(to)
-	for k, v := c.Seek([]byte(from)); bytes.Compare(k, last) <= 0; k, v = c.Next() {
-		r := roaring.NewBitmap()
-		r.UnmarshalBinary(v)
-		b.UnionInPlace(r)
+// Views returns shard -> view mapping for given views. Useful when querying
+// quantum fields. This ensures we only open the shard once and process all
+// views for the shard together.
+func (r *readOps) Views(views ...string) map[uint64][]string {
+	m := map[uint64][]string{}
+	for _, view := range views {
+		data := r.views.Get([]byte(view))
+		if data != nil {
+			r := roaring.NewBitmap()
+			r.UnmarshalBinary(data)
+			it := r.Iterator()
+			for nxt, eof := it.Next(); !eof; nxt, eof = it.Next() {
+				m[nxt] = append(m[nxt], view)
+			}
+		}
 	}
-	o = b.Slice()
-	return
+	for s, v := range m {
+		slices.Sort(v)
+		m[s] = slices.Compact(v)
+	}
+	return m
 }
 
 func (o *Ops) write() (*writeOps, error) {

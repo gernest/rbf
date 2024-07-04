@@ -83,9 +83,9 @@ func (fr FieldRow) MarshalJSON() ([]byte, error) {
 // String is the FieldRow stringer.
 func (fr FieldRow) String() string {
 	if fr.Value != nil {
-		return fmt.Sprintf("%s.%d.%d.%s", fr.Field, fr.RowID, *fr.Value, fr.RowKey)
+		return fmt.Sprintf("%s.%d.%d.%s", fr.Field.Name, fr.RowID, *fr.Value, fr.RowKey)
 	}
-	return fmt.Sprintf("%s.%d.%s", fr.Field, fr.RowID, fr.RowKey)
+	return fmt.Sprintf("%s.%d.%s", fr.Field.Name, fr.RowID, fr.RowKey)
 }
 
 type aggregateType int

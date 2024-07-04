@@ -341,7 +341,7 @@ func rangeBetweenUnsigned(c *rbf.Cursor, shard uint64, filter *rows.Row, bitDept
 	return remaining, nil
 }
 
-func rangeEQ(c *rbf.Cursor, shard, bitDepth uint64, predicate int64, filter ...*rows.Row) (*rows.Row, error) {
+func rangeEQ(c *rbf.Cursor, shard, bitDepth uint64, predicate int64) (*rows.Row, error) {
 	// Start with set of columns with values set.
 	b, err := cursor.Row(c, shard, bsiExistsBit)
 	if err != nil {
