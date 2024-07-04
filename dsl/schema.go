@@ -70,15 +70,12 @@ func (s Shards) get(id uint64) Views {
 
 type Writers map[string]batchWriterFunc
 
-type Writes map[uint64]*tr.Write
-
 // Schema maps proto fields to rbf types.
 type Schema[T proto.Message] struct {
 	store      *Store[T]
 	ops        *writeOps
 	shards     Shards
 	writers    Writers
-	writes     Writes
 	views      TimeRange
 	allShards  *roaring.Bitmap
 	fields     protoreflect.FieldDescriptors
@@ -99,30 +96,14 @@ func (s *Store[T]) Schema() (*Schema[T], error) {
 	return st, st.setup(a)
 }
 
-func (s *Schema[T]) Commit() (err error) {
-	for _, t := range s.writes {
-		x := t.Commit()
-		if x != nil {
-			err = x
-		}
-	}
-	if x := s.ops.Commit(s.allShards, s.views); x != nil {
-		err = x
-	}
-	return
+func (s *Schema[T]) Commit() error {
+	return s.ops.Commit(s.allShards, s.views)
 }
 
 func (s *Schema[T]) Release() (err error) {
-	for _, t := range s.writes {
-		x := t.Release()
-		if x != nil {
-			err = x
-		}
-	}
 	if x := s.ops.Release(); x != nil {
 		err = x
 	}
-	clear(s.writes)
 	clear(s.shards)
 	clear(s.views)
 	s.allShards = roaring.NewBitmap()
@@ -140,19 +121,6 @@ func (s *Schema[T]) next() (uint64, error) {
 		return 0, err
 	}
 	return s.ops.NextID()
-}
-
-func (s *Schema[T]) tr(shard uint64) (*tr.Write, error) {
-	t, ok := s.writes[shard]
-	if !ok {
-		t, err := s.store.shards.TrWrite(shard)
-		if err != nil {
-			return nil, err
-		}
-		s.writes[shard] = t
-		return t, nil
-	}
-	return t, nil
 }
 
 func Millisecond(value protoreflect.Value) time.Time {
@@ -201,13 +169,9 @@ func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 		s.allShards.DirectAdd(shard)
 	}
 	fields := s.shards.get(shard).get(StandardView)
-	tr, err := s.tr(shard)
-	if err != nil {
-		return err
-	}
 	msg.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 		name := string(fd.Name())
-		err = s.writers[name](fields.get(name), tr, name, id, v)
+		err = s.writers[name](fields.get(name), s.ops.tr, name, id, v)
 		return err == nil
 	})
 	return

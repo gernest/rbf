@@ -2,9 +2,11 @@ package dsl
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"path/filepath"
 
+	"github.com/gernest/rbf/dsl/tr"
 	"github.com/gernest/roaring"
 	"go.etcd.io/bbolt"
 )
@@ -16,11 +18,22 @@ var (
 
 type Ops struct {
 	db *bbolt.DB
+	tr *tr.File
+}
+
+func (o *Ops) Close() error {
+	return errors.Join(o.db.Close(), o.tr.Close())
 }
 
 func newOps(path string) (*Ops, error) {
 	full := filepath.Join(path, "OPS")
 	db, err := bbolt.Open(full, 0600, nil)
+	if err != nil {
+		return nil, err
+	}
+	fullTr := filepath.Join(path, "TRANSLATE")
+	tr := tr.New(fullTr)
+	err = tr.Open()
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +49,7 @@ func newOps(path string) (*Ops, error) {
 		db.Close()
 		return nil, err
 	}
-	return &Ops{db: db}, nil
+	return &Ops{db: db, tr: tr}, nil
 }
 
 func (o *Ops) read() (*readOps, error) {
@@ -44,19 +57,26 @@ func (o *Ops) read() (*readOps, error) {
 	if err != nil {
 		return nil, err
 	}
+	r, err := o.tr.Read()
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
 	return &readOps{
 		tx:    tx,
+		tr:    r,
 		views: tx.Bucket(viewsBucket),
 	}, nil
 }
 
 type readOps struct {
 	tx    *bbolt.Tx
+	tr    *tr.Read
 	views *bbolt.Bucket
 }
 
 func (r *readOps) Release() error {
-	return r.tx.Rollback()
+	return errors.Join(r.tx.Rollback(), r.tr.Release())
 }
 
 func (r *readOps) All() (o []uint64) {
@@ -99,8 +119,13 @@ func (o *Ops) write() (*writeOps, error) {
 	if err != nil {
 		return nil, err
 	}
+	w, err := o.tr.Write()
+	if err != nil {
+		return nil, err
+	}
 	return &writeOps{
 		tx:    tx,
+		tr:    w,
 		views: tx.Bucket(viewsBucket),
 		seq:   tx.Bucket(seqBucket),
 	}, nil
@@ -108,6 +133,7 @@ func (o *Ops) write() (*writeOps, error) {
 
 type writeOps struct {
 	tx    *bbolt.Tx
+	tr    *tr.Write
 	views *bbolt.Bucket
 	seq   *bbolt.Bucket
 }
@@ -120,11 +146,11 @@ func (o *writeOps) Release() error {
 	if o == nil {
 		return nil
 	}
-	return o.tx.Rollback()
+	return errors.Join(o.tx.Rollback(), o.tr.Release())
 }
 
 func (o *writeOps) Commit(all *roaring.Bitmap, m map[string]*roaring.Bitmap) error {
-	defer o.tx.Rollback()
+	defer o.Release()
 
 	for view, shards := range m {
 		if data := o.views.Get([]byte(view)); data != nil {
@@ -160,5 +186,5 @@ func (o *writeOps) Commit(all *roaring.Bitmap, m map[string]*roaring.Bitmap) err
 	if err != nil {
 		return fmt.Errorf("put all shards bitmap %w", err)
 	}
-	return o.tx.Commit()
+	return errors.Join(o.tx.Commit(), o.tr.Commit())
 }
