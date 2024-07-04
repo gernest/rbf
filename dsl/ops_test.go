@@ -26,9 +26,9 @@ func TestOps(t *testing.T) {
 	require.NoError(t, err)
 
 	defer r.Release()
-	require.Equal(t, []uint64{1, 2, 3}, r.Shards("test"))
-	require.Equal(t, map[uint64][]string{
-		1: {"1"},
-		3: {"3"},
-	}, r.Views("1", "3"))
+	require.Equal(t, []Shard{
+		{1, []string{"1", "test"}},
+		{2, []string{"test"}},
+		{3, []string{"3", "test"}},
+	}, r.Shards("test", "1", "3"))
 }

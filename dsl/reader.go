@@ -49,9 +49,9 @@ func (r *Reader[T]) Rows(field string, opts *RowsOption) (query.IDs, error) {
 		views = quantum.ViewsByTimeRange(StandardView, opts.From, opts.To, quantum.TimeQuantum("D"))
 	}
 	o := roaring64.New()
-	for _, view := range views {
-		for _, shard := range r.ops.Shards(view) {
-			err := r.rowsShards(f, shard, o, opts)
+	for _, shard := range r.ops.Shards(views...) {
+		for _, view := range shard.Views {
+			err := r.rowsShards(field, view, shard.Shard, o, opts)
 			if err != nil {
 				return nil, err
 			}
@@ -68,7 +68,7 @@ func (r *Reader[T]) Rows(field string, opts *RowsOption) (query.IDs, error) {
 	return query.IDs(o.ToArray()), nil
 }
 
-func (r *Reader[T]) rowsShards(field protoreflect.FieldDescriptor, shard uint64, o *roaring64.Bitmap, opts *RowsOption) error {
+func (r *Reader[T]) rowsShards(field, view string, shard uint64, o *roaring64.Bitmap, opts *RowsOption) error {
 	var column uint64
 	if opts != nil && opts.Column != 0 {
 		colShard := opts.Column >> shardwidth.Exponent
@@ -80,7 +80,7 @@ func (r *Reader[T]) rowsShards(field protoreflect.FieldDescriptor, shard uint64,
 	if opts != nil && opts.Limit != 0 {
 		limit = opts.Limit
 	}
-	return r.cursor(field, shard, func(c *rbf.Cursor, tr *tr.Read) error {
+	return r.cursor(ViewKey(field, view), shard, func(c *rbf.Cursor, tr *tr.Read) error {
 		filters := []roaring.BitmapFilter{}
 		if column != 0 {
 			filters = append(filters, roaring.NewBitmapColumnFilter(column))
@@ -89,7 +89,7 @@ func (r *Reader[T]) rowsShards(field protoreflect.FieldDescriptor, shard uint64,
 			filters = append(filters, roaring.NewBitmapRowLimitFilter(opts.Limit))
 		}
 		if opts != nil && opts.Like != "" {
-			return tr.SearchRe(string(field.Name()), opts.Like, nil, nil, func(_ []byte, value uint64) {
+			return tr.SearchRe(field, opts.Like, nil, nil, func(_ []byte, value uint64) {
 				o.Add(value)
 			})
 		}
@@ -104,9 +104,8 @@ func (r *Reader[T]) rowsShards(field protoreflect.FieldDescriptor, shard uint64,
 	})
 }
 
-func (r *Reader[T]) cursor(field protoreflect.FieldDescriptor, shard uint64, f func(c *rbf.Cursor, tr *tr.Read) error) error {
+func (r *Reader[T]) cursor(view string, shard uint64, f func(c *rbf.Cursor, tr *tr.Read) error) error {
 	return r.store.shards.View2(shard, func(tx *rbf.Tx, tr *tr.Read) error {
-		view := ViewKey(string(field.Name()), StandardView)
 		c, err := tx.Cursor(view)
 		if err != nil {
 			if errors.Is(err, rbf.ErrBitmapNotFound) {

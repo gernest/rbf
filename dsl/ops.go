@@ -1,6 +1,7 @@
 package dsl
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -79,21 +80,15 @@ func (r *readOps) Release() error {
 	return errors.Join(r.tx.Rollback(), r.tr.Release())
 }
 
-// Shards returns all shards for the given view.
-func (r *readOps) Shards(view string) (o []uint64) {
-	data := r.views.Get([]byte(view))
-	if data != nil {
-		r := roaring.NewBitmap()
-		r.UnmarshalBinary(data)
-		o = r.Slice()
-	}
-	return
+type Shard struct {
+	Shard uint64
+	Views []string
 }
 
-// Views returns shard -> view mapping for given views. Useful when querying
+// Shards returns shard -> view mapping for given views. Useful when querying
 // quantum fields. This ensures we only open the shard once and process all
 // views for the shard together.
-func (r *readOps) Views(views ...string) map[uint64][]string {
+func (r *readOps) Shards(views ...string) []Shard {
 	m := map[uint64][]string{}
 	for _, view := range views {
 		data := r.views.Get([]byte(view))
@@ -106,11 +101,17 @@ func (r *readOps) Views(views ...string) map[uint64][]string {
 			}
 		}
 	}
+	o := make([]Shard, 0, len(m))
 	for s, v := range m {
 		slices.Sort(v)
-		m[s] = slices.Compact(v)
+		o = append(o, Shard{
+			Shard: s, Views: slices.Compact(v),
+		})
 	}
-	return m
+	slices.SortFunc(o, func(a, b Shard) int {
+		return cmp.Compare(a.Shard, b.Shard)
+	})
+	return o
 }
 
 func (o *Ops) write() (*writeOps, error) {
