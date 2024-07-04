@@ -141,8 +141,16 @@ func (s *Schema[T]) Write(msg T) error {
 func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 	shard := id / shardwidth.ShardWidth
 	tsField := msg.Descriptor().Fields().ByName(s.timestampField)
+
+	// all fields go to standard view. There is no need to differentiate between
+	// bsi and non bsi because we use generics and T ensures we work with actual
+	// field types.
 	s.views = append(s.views[:0], StandardView)
+
 	if tsField != nil {
+		// We support historical data. To avoid touching shards that don't have
+		// relevant data we create quantum views that only apply to string or string
+		// set columns.
 		ts := s.timeFormat(msg.Get(tsField))
 		s.views = append(s.views, quantum.ViewByTimeUnit(StandardView, ts, 'D'))
 	}
@@ -150,8 +158,11 @@ func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 	msg.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 		name := string(fd.Name())
 		kind := fd.Kind()
-		for _, view := range s.views {
-			writers[kind](vs.get(view).get(name), s.ops.tr, fd, id, v)
+		writers[kind](vs.get(s.views[0]).get(name), s.ops.tr, fd, id, v)
+		if kind == protoreflect.StringKind && len(s.views) > 1 {
+			// Search is generally done on string columns. Only create quantum views on
+			// string columns.
+			writers[kind](vs.get(s.views[1]).get(name), s.ops.tr, fd, id, v)
 		}
 		return true
 	})
