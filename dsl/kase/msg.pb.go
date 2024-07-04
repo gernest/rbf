@@ -364,6 +364,100 @@ func (x *Set) GetUint64() [][]byte {
 	return nil
 }
 
+type TimestampMS struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Timestamp int64 `protobuf:"varint,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+}
+
+func (x *TimestampMS) Reset() {
+	*x = TimestampMS{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_msg_proto_msgTypes[6]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *TimestampMS) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TimestampMS) ProtoMessage() {}
+
+func (x *TimestampMS) ProtoReflect() protoreflect.Message {
+	mi := &file_msg_proto_msgTypes[6]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TimestampMS.ProtoReflect.Descriptor instead.
+func (*TimestampMS) Descriptor() ([]byte, []int) {
+	return file_msg_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *TimestampMS) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+type TimestampNS struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Timestamp uint64 `protobuf:"varint,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+}
+
+func (x *TimestampNS) Reset() {
+	*x = TimestampNS{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_msg_proto_msgTypes[7]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *TimestampNS) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TimestampNS) ProtoMessage() {}
+
+func (x *TimestampNS) ProtoReflect() protoreflect.Message {
+	mi := &file_msg_proto_msgTypes[7]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TimestampNS.ProtoReflect.Descriptor instead.
+func (*TimestampNS) Descriptor() ([]byte, []int) {
+	return file_msg_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *TimestampNS) GetTimestamp() uint64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
 var File_msg_proto protoreflect.FileDescriptor
 
 var file_msg_proto_rawDesc = []byte{
@@ -384,10 +478,16 @@ var file_msg_proto_rawDesc = []byte{
 	0x28, 0x0c, 0x52, 0x04, 0x62, 0x6c, 0x6f, 0x62, 0x22, 0x35, 0x0a, 0x03, 0x53, 0x65, 0x74, 0x12,
 	0x16, 0x0a, 0x06, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x18, 0x01, 0x20, 0x03, 0x28, 0x09, 0x52,
 	0x06, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x12, 0x16, 0x0a, 0x06, 0x75, 0x69, 0x6e, 0x74, 0x36,
-	0x34, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0c, 0x52, 0x06, 0x75, 0x69, 0x6e, 0x74, 0x36, 0x34, 0x42,
-	0x21, 0x5a, 0x1f, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x67, 0x65,
-	0x72, 0x6e, 0x65, 0x73, 0x74, 0x2f, 0x72, 0x62, 0x66, 0x2f, 0x64, 0x73, 0x6c, 0x2f, 0x6b, 0x61,
-	0x73, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x34, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0c, 0x52, 0x06, 0x75, 0x69, 0x6e, 0x74, 0x36, 0x34, 0x22,
+	0x2b, 0x0a, 0x0b, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x4d, 0x53, 0x12, 0x1c,
+	0x0a, 0x09, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x03, 0x52, 0x09, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x22, 0x2b, 0x0a, 0x0b,
+	0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x4e, 0x53, 0x12, 0x1c, 0x0a, 0x09, 0x74,
+	0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x09,
+	0x74, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x42, 0x21, 0x5a, 0x1f, 0x67, 0x69, 0x74,
+	0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x67, 0x65, 0x72, 0x6e, 0x65, 0x73, 0x74, 0x2f,
+	0x72, 0x62, 0x66, 0x2f, 0x64, 0x73, 0x6c, 0x2f, 0x6b, 0x61, 0x73, 0x65, 0x62, 0x06, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -403,15 +503,17 @@ func file_msg_proto_rawDescGZIP() []byte {
 }
 
 var file_msg_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_msg_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_msg_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_msg_proto_goTypes = []interface{}{
-	(Mutex_Enum)(0), // 0: kase.Mutex.Enum
-	(*Mutex)(nil),   // 1: kase.Mutex
-	(*BSI)(nil),     // 2: kase.BSI
-	(*Bool)(nil),    // 3: kase.Bool
-	(*String)(nil),  // 4: kase.String
-	(*Blob)(nil),    // 5: kase.Blob
-	(*Set)(nil),     // 6: kase.Set
+	(Mutex_Enum)(0),     // 0: kase.Mutex.Enum
+	(*Mutex)(nil),       // 1: kase.Mutex
+	(*BSI)(nil),         // 2: kase.BSI
+	(*Bool)(nil),        // 3: kase.Bool
+	(*String)(nil),      // 4: kase.String
+	(*Blob)(nil),        // 5: kase.Blob
+	(*Set)(nil),         // 6: kase.Set
+	(*TimestampMS)(nil), // 7: kase.TimestampMS
+	(*TimestampNS)(nil), // 8: kase.TimestampNS
 }
 var file_msg_proto_depIdxs = []int32{
 	0, // 0: kase.Mutex.mutex:type_name -> kase.Mutex.Enum
@@ -500,6 +602,30 @@ func file_msg_proto_init() {
 				return nil
 			}
 		}
+		file_msg_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*TimestampMS); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_msg_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*TimestampNS); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -507,7 +633,7 @@ func file_msg_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_msg_proto_rawDesc,
 			NumEnums:      1,
-			NumMessages:   6,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

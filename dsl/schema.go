@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	StandardView = "standard"
-	Quantum      = "20060102"
+	StandardView   = "standard"
+	Quantum        = "20060102"
+	TimestampField = protoreflect.Name("timestamp")
 )
 
 type Fields map[string]*roaring.Bitmap
@@ -59,23 +60,19 @@ type Writers map[string]writeFn
 
 // Schema maps proto fields to rbf types.
 type Schema[T proto.Message] struct {
-	store          *Store[T]
-	ops            *writeOps
-	shards         Shards
-	fields         protoreflect.FieldDescriptors
-	timeFormat     func(value protoreflect.Value) time.Time
-	timestampField protoreflect.Name
-	views          []string
+	store  *Store[T]
+	ops    *writeOps
+	shards Shards
+	fields protoreflect.FieldDescriptors
+	views  []string
 }
 
 func (s *Store[T]) Schema() (*Schema[T], error) {
 	var a T
 	st := &Schema[T]{
-		store:          s,
-		timeFormat:     Millisecond,
-		shards:         make(Shards),
-		fields:         a.ProtoReflect().Descriptor().Fields(),
-		timestampField: "timestamp",
+		store:  s,
+		shards: make(Shards),
+		fields: a.ProtoReflect().Descriptor().Fields(),
 	}
 	return st, st.validate(a)
 }
@@ -105,17 +102,19 @@ func (s *Schema[T]) next() (uint64, error) {
 	return s.ops.NextID()
 }
 
+type timeFmt func(value protoreflect.Value) time.Time
+
+var timeQuantum = map[protoreflect.Kind]timeFmt{
+	protoreflect.Int64Kind:  Millisecond,
+	protoreflect.Uint64Kind: Nanosecond,
+}
+
 func Millisecond(value protoreflect.Value) time.Time {
 	return time.UnixMilli(value.Int())
 }
 
 func Nanosecond(value protoreflect.Value) time.Time {
 	return time.Unix(0, int64(value.Uint()))
-}
-
-func (s *Schema[T]) TimeFormat(field string, f func(value protoreflect.Value) time.Time) {
-	s.timeFormat = f
-	s.timestampField = protoreflect.Name(field)
 }
 
 type RangeCallback func(shard uint64, views Views) error
@@ -140,7 +139,7 @@ func (s *Schema[T]) Write(msg T) error {
 
 func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 	shard := id / shardwidth.ShardWidth
-	tsField := msg.Descriptor().Fields().ByName(s.timestampField)
+	tsField := msg.Descriptor().Fields().ByName(TimestampField)
 
 	// all fields go to standard view. There is no need to differentiate between
 	// bsi and non bsi because we use generics and T ensures we work with actual
@@ -151,7 +150,7 @@ func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 		// We support historical data. To avoid touching shards that don't have
 		// relevant data we create quantum views that only apply to string or string
 		// set columns.
-		ts := s.timeFormat(msg.Get(tsField))
+		ts := timeQuantum[tsField.Kind()](msg.Get(tsField))
 		s.views = append(s.views, quantum.ViewByTimeUnit(StandardView, ts, 'D'))
 	}
 	vs := s.shards.get(shard)

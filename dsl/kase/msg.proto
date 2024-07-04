@@ -24,3 +24,6 @@ message Set {
   repeated string string = 1;
   repeated bytes uint64 = 2;
 }
+
+message TimestampMS { int64 timestamp = 1; }
+message TimestampNS { uint64 timestamp = 1; }
