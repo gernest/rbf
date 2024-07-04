@@ -128,7 +128,7 @@ func Millisecond(value protoreflect.Value) time.Time {
 }
 
 func Nanosecond(value protoreflect.Value) time.Time {
-	return time.Unix(0, value.Int())
+	return time.Unix(0, int64(value.Uint()))
 }
 
 func (s *Schema[T]) TimeFormat(f func(value protoreflect.Value) time.Time) {
