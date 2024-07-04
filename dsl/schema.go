@@ -72,26 +72,28 @@ type Writers map[string]batchWriterFunc
 
 // Schema maps proto fields to rbf types.
 type Schema[T proto.Message] struct {
-	store      *Store[T]
-	ops        *writeOps
-	shards     Shards
-	writers    Writers
-	views      TimeRange
-	allShards  *roaring.Bitmap
-	fields     protoreflect.FieldDescriptors
-	timeFormat func(value protoreflect.Value) time.Time
+	store          *Store[T]
+	ops            *writeOps
+	shards         Shards
+	writers        Writers
+	views          TimeRange
+	allShards      *roaring.Bitmap
+	fields         protoreflect.FieldDescriptors
+	timeFormat     func(value protoreflect.Value) time.Time
+	timestampField protoreflect.Name
 }
 
 func (s *Store[T]) Schema() (*Schema[T], error) {
 	var a T
 	st := &Schema[T]{
-		store:      s,
-		timeFormat: Millisecond,
-		shards:     make(Shards),
-		writers:    make(Writers),
-		views:      make(TimeRange),
-		allShards:  roaring.NewBitmap(),
-		fields:     a.ProtoReflect().Descriptor().Fields(),
+		store:          s,
+		timeFormat:     Millisecond,
+		shards:         make(Shards),
+		writers:        make(Writers),
+		views:          make(TimeRange),
+		allShards:      roaring.NewBitmap(),
+		fields:         a.ProtoReflect().Descriptor().Fields(),
+		timestampField: "timestamp",
 	}
 	return st, st.setup(a)
 }
@@ -131,8 +133,9 @@ func Nanosecond(value protoreflect.Value) time.Time {
 	return time.Unix(0, int64(value.Uint()))
 }
 
-func (s *Schema[T]) TimeFormat(f func(value protoreflect.Value) time.Time) {
+func (s *Schema[T]) TimeFormat(field string, f func(value protoreflect.Value) time.Time) {
 	s.timeFormat = f
+	s.timestampField = protoreflect.Name(field)
 }
 
 type RangeCallback func(shard uint64, views Views) error
@@ -155,11 +158,9 @@ func (s *Schema[T]) Write(msg T) error {
 	return s.write(id, msg.ProtoReflect())
 }
 
-const TimestampField = protoreflect.Name("timestamp")
-
 func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 	shard := id / shardwidth.ShardWidth
-	tsField := msg.Descriptor().Fields().ByName(TimestampField)
+	tsField := msg.Descriptor().Fields().ByName(s.timestampField)
 	if tsField != nil {
 		view := s.timeFormat(msg.Get(tsField)).Format(Quantum)
 		s.views.Set(view, shard)
