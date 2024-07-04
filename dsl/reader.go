@@ -9,8 +9,8 @@ import (
 	"github.com/RoaringBitmap/roaring/roaring64"
 	"github.com/gernest/rbf"
 	"github.com/gernest/rbf/dsl/cursor"
+	"github.com/gernest/rbf/dsl/query"
 	"github.com/gernest/rbf/dsl/tr"
-	"github.com/gernest/rbf/ql/core"
 	"github.com/gernest/roaring"
 	"github.com/gernest/roaring/shardwidth"
 	"google.golang.org/protobuf/proto"
@@ -32,16 +32,14 @@ type RowsOption struct {
 	Previous uint64
 }
 
-func (r *Reader[T]) Rows(field string, opts *RowsOption) (*core.RowIdentifiers, error) {
+func (r *Reader[T]) Rows(field string, opts *RowsOption) (query.IDs, error) {
 	f := r.fields.ByName(protoreflect.Name(field))
 	if f == nil {
 		return nil, fmt.Errorf("field %s not found", field)
 	}
-	var keys bool
 	switch f.Kind() {
 	case protoreflect.EnumKind:
 	case protoreflect.StringKind:
-		keys = true
 	default:
 		return nil, fmt.Errorf("field %v does not support Rows", f.Kind())
 	}
@@ -63,24 +61,10 @@ func (r *Reader[T]) Rows(field string, opts *RowsOption) (*core.RowIdentifiers, 
 		limit = opts.Limit
 	}
 	size := min(limit, o.GetCardinality())
-	result := core.RowIdentifiers{
-		Field: field,
+	if n, err := o.Select(size); err == nil {
+		o.RemoveRange(n, o.Maximum())
 	}
-	if keys {
-		result.Keys = make([]string, 0, size)
-	} else {
-		result.Rows = make([]uint64, 0, size)
-	}
-	it := o.Iterator()
-	for ; size > 0 && it.HasNext(); size-- {
-		if keys {
-			result.Keys = append(result.Keys, string(r.ops.tr.Key(field, it.Next())))
-		} else {
-			result.Rows = append(result.Rows, it.Next())
-		}
-	}
-	return &result, nil
-
+	return query.IDs(o.ToArray()), nil
 }
 
 func (r *Reader[T]) rowsShards(field protoreflect.FieldDescriptor, shard uint64, o *roaring64.Bitmap, opts *RowsOption) error {
