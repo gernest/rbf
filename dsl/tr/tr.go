@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/blevesearch/vellum"
+	"github.com/blevesearch/vellum/regexp"
 	"github.com/cespare/xxhash/v2"
 	"go.etcd.io/bbolt"
 )
@@ -311,6 +312,26 @@ func (r *Read) Blob(field string, id uint64) []byte {
 	return get(ids.Get(b[:]))
 }
 
+func (r *Read) SearchRe(field string, like string, start, end []byte, match func(key []byte, value uint64)) error {
+	b := r.fst.Get([]byte(field))
+	if b == nil {
+		return nil
+	}
+	re, err := regexp.New(like)
+	if err != nil {
+		return fmt.Errorf("compiling regex %w", err)
+	}
+	fst, err := vellum.Load(b)
+	if err != nil {
+		return err
+	}
+	it, err := fst.Search(re, start, end)
+	for err == nil {
+		match(it.Current())
+		err = it.Next()
+	}
+	return nil
+}
 func (r *Read) Search(field string, a vellum.Automaton, start, end []byte, match func(key []byte, value uint64)) error {
 	b := r.fst.Get([]byte(field))
 	if b == nil {

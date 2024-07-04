@@ -18,6 +18,7 @@ import (
 
 const (
 	StandardView = "standard"
+	Quantum      = "20060102"
 )
 
 type Fields map[string]*roaring.Bitmap
@@ -193,7 +194,7 @@ func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 	shard := id / shardwidth.ShardWidth
 	tsField := msg.Descriptor().Fields().ByName(TimestampField)
 	if tsField != nil {
-		view := s.timeFormat(msg.Get(tsField)).Format("20060102")
+		view := s.timeFormat(msg.Get(tsField)).Format(Quantum)
 		s.views.Set(view, shard)
 	}
 	if !s.allShards.Contains(shard) {
