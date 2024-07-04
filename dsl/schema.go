@@ -158,7 +158,6 @@ func (s *Schema[T]) Write(msg T) error {
 const TimestampField = protoreflect.Name("timestamp")
 
 func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
-
 	shard := id / shardwidth.ShardWidth
 	tsField := msg.Descriptor().Fields().ByName(TimestampField)
 	if tsField != nil {

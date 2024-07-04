@@ -3,12 +3,14 @@ package dsl
 import (
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
+	"github.com/RoaringBitmap/roaring/roaring64"
 	"github.com/gernest/rbf"
 	"github.com/gernest/rbf/dsl/cursor"
-	"github.com/gernest/rbf/dsl/query"
 	"github.com/gernest/rbf/dsl/tr"
+	"github.com/gernest/rbf/ql/core"
 	"github.com/gernest/roaring"
 	"github.com/gernest/roaring/shardwidth"
 	"google.golang.org/protobuf/proto"
@@ -30,13 +32,16 @@ type RowsOption struct {
 	Previous uint64
 }
 
-func (r *Reader[T]) Rows(field string, opts *RowsOption) (query.IDs, error) {
+func (r *Reader[T]) Rows(field string, opts *RowsOption) (*core.RowIdentifiers, error) {
 	f := r.fields.ByName(protoreflect.Name(field))
 	if f == nil {
 		return nil, fmt.Errorf("field %s not found", field)
 	}
+	var keys bool
 	switch f.Kind() {
-	case protoreflect.EnumKind, protoreflect.StringKind:
+	case protoreflect.EnumKind:
+	case protoreflect.StringKind:
+		keys = true
 	default:
 		return nil, fmt.Errorf("field %v does not support Rows", f.Kind())
 	}
@@ -46,35 +51,51 @@ func (r *Reader[T]) Rows(field string, opts *RowsOption) (query.IDs, error) {
 	} else {
 		shards = r.ops.All()
 	}
-	limit := int(^uint(0) >> 1)
-	if opts != nil && opts.Limit != 0 {
-		limit = int(opts.Limit)
-	}
-	var rowIDs query.IDs
+	o := roaring64.New()
 	for _, shard := range shards {
-		rs, err := r.RowsShards(f, shard, opts)
+		err := r.rowsShards(f, shard, o, opts)
 		if err != nil {
 			return nil, err
 		}
-		rowIDs = rowIDs.Merge(rs, limit)
 	}
-	return rowIDs, nil
+	limit := uint64(math.MaxUint64)
+	if opts.Limit != 0 {
+		limit = opts.Limit
+	}
+	size := min(limit, o.GetCardinality())
+	result := core.RowIdentifiers{
+		Field: field,
+	}
+	if keys {
+		result.Keys = make([]string, 0, size)
+	} else {
+		result.Rows = make([]uint64, 0, size)
+	}
+	it := o.Iterator()
+	for ; size > 0 && it.HasNext(); size-- {
+		if keys {
+			result.Keys = append(result.Keys, string(r.ops.tr.Key(field, it.Next())))
+		} else {
+			result.Rows = append(result.Rows, it.Next())
+		}
+	}
+	return &result, nil
+
 }
 
-func (r *Reader[T]) RowsShards(field protoreflect.FieldDescriptor, shard uint64, opts *RowsOption) (query.IDs, error) {
-	var rowIDs query.IDs
+func (r *Reader[T]) rowsShards(field protoreflect.FieldDescriptor, shard uint64, o *roaring64.Bitmap, opts *RowsOption) error {
 	var column uint64
 	if opts != nil && opts.Column != 0 {
 		colShard := opts.Column >> shardwidth.Exponent
 		if colShard != shard {
-			return rowIDs, nil
+			return nil
 		}
 	}
 	var limit uint64
 	if opts != nil && opts.Limit != 0 {
 		limit = opts.Limit
 	}
-	err := r.cursor(field, shard, func(c *rbf.Cursor, tr *tr.Read) error {
+	return r.cursor(field, shard, func(c *rbf.Cursor, tr *tr.Read) error {
 		filters := []roaring.BitmapFilter{}
 		if column != 0 {
 			filters = append(filters, roaring.NewBitmapColumnFilter(column))
@@ -83,26 +104,19 @@ func (r *Reader[T]) RowsShards(field protoreflect.FieldDescriptor, shard uint64,
 			filters = append(filters, roaring.NewBitmapRowLimitFilter(opts.Limit))
 		}
 		if opts != nil && opts.Like != "" {
-			err := tr.SearchRe(string(field.Name()), opts.Like, nil, nil, func(_ []byte, value uint64) {
-				filters = append(filters, roaring.NewBitmapColumnFilter(value))
+			return tr.SearchRe(string(field.Name()), opts.Like, nil, nil, func(_ []byte, value uint64) {
+				o.Add(value)
 			})
-			if err != nil {
-				return err
-			}
 		}
 		var start uint64
 		if opts != nil {
 			start = opts.Previous
 		}
 		return cursor.Rows(c, start, func(row uint64) error {
-			rowIDs = append(rowIDs, row)
+			o.Add(row)
 			return nil
 		}, filters...)
 	})
-	if err != nil {
-		return nil, err
-	}
-	return rowIDs, nil
 }
 
 func (r *Reader[T]) cursor(field protoreflect.FieldDescriptor, shard uint64, f func(c *rbf.Cursor, tr *tr.Read) error) error {

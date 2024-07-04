@@ -3,6 +3,7 @@ module github.com/gernest/rbf
 go 1.22.2
 
 require (
+	github.com/RoaringBitmap/roaring v1.9.4
 	github.com/benbjohnson/immutable v0.4.3
 	github.com/blevesearch/vellum v1.0.10
 	github.com/cespare/xxhash/v2 v2.3.0
@@ -22,10 +23,11 @@ require (
 )
 
 require (
-	github.com/bits-and-blooms/bitset v1.2.0 // indirect
+	github.com/bits-and-blooms/bitset v1.12.0 // indirect
 	github.com/blevesearch/mmap-go v1.0.4 // indirect
 	github.com/google/pprof v0.0.0-20240227163752-401108e1b7e7 // indirect
 	github.com/molecula/apophenia v0.0.0-20190827192002-68b7a14a478b // indirect
+	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f // indirect
 	golang.org/x/sys v0.20.0 // indirect
