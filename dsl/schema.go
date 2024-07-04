@@ -62,7 +62,6 @@ type Schema[T proto.Message] struct {
 	store          *Store[T]
 	ops            *writeOps
 	shards         Shards
-	writers        Writers
 	fields         protoreflect.FieldDescriptors
 	timeFormat     func(value protoreflect.Value) time.Time
 	timestampField protoreflect.Name
@@ -75,11 +74,10 @@ func (s *Store[T]) Schema() (*Schema[T], error) {
 		store:          s,
 		timeFormat:     Millisecond,
 		shards:         make(Shards),
-		writers:        make(Writers),
 		fields:         a.ProtoReflect().Descriptor().Fields(),
 		timestampField: "timestamp",
 	}
-	return st, st.setup(a)
+	return st, st.validate(a)
 }
 
 func (s *Schema[T]) Commit(m map[string]*roaring.Bitmap) error {
@@ -151,89 +149,42 @@ func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 	vs := s.shards.get(shard)
 	msg.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 		name := string(fd.Name())
+		kind := fd.Kind()
 		for _, view := range s.views {
-			err = s.writers[name](vs.get(view).get(name), s.ops.tr, name, id, v)
-			if err != nil {
-				return false
-			}
+			writers[kind](vs.get(view).get(name), s.ops.tr, fd, id, v)
 		}
 		return true
 	})
 	return
 }
 
-type writeFn func(r *roaring.Bitmap, tr *tr.Write, field string, id uint64, value protoreflect.Value) error
+type writeFn func(r *roaring.Bitmap, tr *tr.Write, field protoreflect.FieldDescriptor, id uint64, value protoreflect.Value)
 
-func (s *Schema[T]) setup(msg proto.Message) error {
+func (s *Schema[T]) validate(msg proto.Message) error {
 	fields := msg.ProtoReflect().Descriptor().Fields()
 	for i := 0; i < fields.Len(); i++ {
 		f := fields.Get(i)
-		var fn writeFn
 		if f.IsList() {
 			// only []string  and [][]byte is supported
 			switch f.Kind() {
-			case protoreflect.StringKind:
-				fn = func(r *roaring.Bitmap, tr *tr.Write, field string, id uint64, value protoreflect.Value) error {
-					ls := value.List()
-					for n := 0; n < ls.Len(); n++ {
-						mutex.Add(r, id, tr.Tr(field, []byte(ls.Get(n).String())))
-					}
-					return nil
-				}
-			case protoreflect.BytesKind:
-				fn = func(r *roaring.Bitmap, tr *tr.Write, field string, id uint64, value protoreflect.Value) error {
-					ls := value.List()
-					for n := 0; n < ls.Len(); n++ {
-						mutex.Add(r, id, tr.Blob(field, ls.Get(n).Bytes()))
-					}
-					return nil
-				}
+			case protoreflect.StringKind,
+				protoreflect.BytesKind:
 			default:
-				return fmt.Errorf("%s is not supported", f.Kind())
+				return fmt.Errorf("%s list is not supported", f.Kind())
 			}
-			s.writers[string(f.Name())] = fn
 			continue
 		}
 		switch f.Kind() {
-		case protoreflect.BoolKind:
-			fn = func(r *roaring.Bitmap, _ *tr.Write, _ string, id uint64, value protoreflect.Value) error {
-				boolean.Add(r, id, value.Bool())
-				return nil
-			}
-		case protoreflect.EnumKind:
-			fn = func(r *roaring.Bitmap, _ *tr.Write, _ string, id uint64, value protoreflect.Value) error {
-				mutex.Add(r, id, uint64(value.Enum()))
-				return nil
-			}
-		case protoreflect.Int64Kind:
-			fn = func(r *roaring.Bitmap, _ *tr.Write, _ string, id uint64, value protoreflect.Value) error {
-				bsi.Add(r, id, value.Int())
-				return nil
-			}
-		case protoreflect.Uint64Kind:
-			fn = func(r *roaring.Bitmap, _ *tr.Write, _ string, id uint64, value protoreflect.Value) error {
-				bsi.Add(r, id, int64(value.Uint()))
-				return nil
-			}
-		case protoreflect.DoubleKind:
-			fn = func(r *roaring.Bitmap, _ *tr.Write, _ string, id uint64, value protoreflect.Value) error {
-				bsi.Add(r, id, int64(math.Float64bits(value.Float())))
-				return nil
-			}
-		case protoreflect.StringKind:
-			fn = func(r *roaring.Bitmap, tr *tr.Write, field string, id uint64, value protoreflect.Value) error {
-				mutex.Add(r, id, tr.Tr(field, []byte(value.String())))
-				return nil
-			}
-		case protoreflect.BytesKind:
-			fn = func(r *roaring.Bitmap, tr *tr.Write, field string, id uint64, value protoreflect.Value) error {
-				mutex.Add(r, id, tr.Blob(field, value.Bytes()))
-				return nil
-			}
+		case protoreflect.BoolKind,
+			protoreflect.EnumKind,
+			protoreflect.Int64Kind,
+			protoreflect.Uint64Kind,
+			protoreflect.DoubleKind,
+			protoreflect.StringKind,
+			protoreflect.BytesKind:
 		default:
 			return fmt.Errorf("%s is not supported", f.Kind())
 		}
-		s.writers[string(f.Name())] = fn
 	}
 	return nil
 }
@@ -268,4 +219,63 @@ func (s *Schema[T]) Save() error {
 		return err
 	}
 	return s.Commit(m)
+}
+
+var (
+	writers = map[protoreflect.Kind]writeFn{
+		protoreflect.BoolKind:   Bool,
+		protoreflect.EnumKind:   Enum,
+		protoreflect.Int64Kind:  Int64,
+		protoreflect.Uint64Kind: Uint64,
+		protoreflect.DoubleKind: Float64,
+		protoreflect.StringKind: String,
+		protoreflect.BytesKind:  Bytes,
+	}
+)
+
+// Bool writes a boolean proto value
+func Bool(r *roaring.Bitmap, _ *tr.Write, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) {
+	boolean.Add(r, id, value.Bool())
+}
+
+// Enum writes enum proto value
+func Enum(r *roaring.Bitmap, _ *tr.Write, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) {
+	mutex.Add(r, id, uint64(value.Enum()))
+}
+
+// Int64 writes int64 proto value
+func Int64(r *roaring.Bitmap, _ *tr.Write, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) {
+	bsi.Add(r, id, value.Int())
+}
+
+func Uint64(r *roaring.Bitmap, _ *tr.Write, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) {
+	bsi.Add(r, id, int64(value.Uint()))
+}
+
+func Float64(r *roaring.Bitmap, _ *tr.Write, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) {
+	bsi.Add(r, id, int64(math.Float64bits(value.Float())))
+}
+
+func String(r *roaring.Bitmap, tr *tr.Write, field protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) {
+	name := field.Name()
+	if field.IsList() {
+		ls := value.List()
+		for i := 0; i < ls.Len(); i++ {
+			mutex.Add(r, id, tr.Tr(string(name), []byte(ls.Get(i).String())))
+		}
+	} else {
+		mutex.Add(r, id, tr.Tr(string(name), []byte(value.String())))
+	}
+}
+
+func Bytes(r *roaring.Bitmap, tr *tr.Write, field protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) {
+	name := field.Name()
+	if field.IsList() {
+		ls := value.List()
+		for i := 0; i < ls.Len(); i++ {
+			mutex.Add(r, id, tr.Blob(string(name), ls.Get(i).Bytes()))
+		}
+	} else {
+		mutex.Add(r, id, tr.Blob(string(name), value.Bytes()))
+	}
 }
