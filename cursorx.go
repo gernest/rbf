@@ -14,6 +14,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+func (c *Cursor) Iterator() roaring.ContainerIterator {
+	return &containerIterator{cursor: c}
+}
+
 func (c *Cursor) ApplyRewriter(key uint64, rewriter roaring.BitmapRewriter) (err error) {
 	f := c.getContainerFilter(nil, rewriter)
 	defer f.Close()
