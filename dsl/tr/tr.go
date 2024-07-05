@@ -312,7 +312,7 @@ func (r *Read) Blob(field string, id uint64) []byte {
 	return get(ids.Get(b[:]))
 }
 
-func (r *Read) SearchRe(field string, like string, start, end []byte, match func(key []byte, value uint64)) error {
+func (r *Read) SearchRe(field string, like string, start, end []byte, match func(key []byte, value uint64) error) error {
 	b := r.fst.Get([]byte(field))
 	if b == nil {
 		return nil
@@ -327,7 +327,10 @@ func (r *Read) SearchRe(field string, like string, start, end []byte, match func
 	}
 	it, err := fst.Search(re, start, end)
 	for err == nil {
-		match(it.Current())
+		err = match(it.Current())
+		if err != nil {
+			return err
+		}
 		err = it.Next()
 	}
 	return nil
