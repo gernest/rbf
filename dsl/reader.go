@@ -2,14 +2,11 @@ package dsl
 
 import (
 	"errors"
-	"fmt"
-	"math"
 	"time"
 
 	"github.com/RoaringBitmap/roaring/roaring64"
 	"github.com/gernest/rbf"
 	"github.com/gernest/rbf/dsl/cursor"
-	"github.com/gernest/rbf/dsl/query"
 	"github.com/gernest/rbf/dsl/tr"
 	"github.com/gernest/rbf/quantum"
 	"github.com/gernest/roaring"
@@ -56,45 +53,31 @@ type RowsOption struct {
 	Previous uint64
 }
 
-func (r *Reader[T]) Rows(field string, opts *RowsOption) (query.IDs, error) {
-	f := r.fields.ByName(protoreflect.Name(field))
-	if f == nil {
-		return nil, fmt.Errorf("field %s not found", field)
+// Standard returns the standard shard. Use this to query global data
+func (r Reader[T]) Standard() Shard {
+	a := r.ops.Shards(StandardView)
+	if len(a) > 0 {
+		return a[0]
 	}
-	switch f.Kind() {
-	case protoreflect.EnumKind:
-	case protoreflect.StringKind:
-	default:
-		if field != ID {
-			return nil, fmt.Errorf("field %v does not support Rows", f.Kind())
-		}
-		// ID is a special existence mutex field.
-	}
-	views := []string{StandardView}
-	if opts != nil && !opts.From.IsZero() && !opts.To.IsZero() {
-		views = quantum.ViewsByTimeRange(StandardView, opts.From, opts.To, quantum.TimeQuantum("D"))
-	}
-	o := roaring64.New()
-	for _, shard := range r.ops.Shards(views...) {
-		for _, view := range shard.Views {
-			err := r.rowsShards(field, view, shard.Shard, o, opts)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	limit := uint64(math.MaxUint64)
-	if opts.Limit != 0 {
-		limit = opts.Limit
-	}
-	size := min(limit, o.GetCardinality())
-	if n, err := o.Select(size); err == nil {
-		o.RemoveRange(n, o.Maximum())
-	}
-	return query.IDs(o.ToArray()), nil
+	return Shard{}
 }
 
-func (r *Reader[T]) rowsShards(field, view string, shard uint64, o *roaring64.Bitmap, opts *RowsOption) error {
+// Range returns shards for the time range.
+func (r Reader[T]) Range(start, end time.Time) []Shard {
+	if sameDate(start, end) {
+		return r.ops.Shards(quantum.ViewByTimeUnit(StandardView, start, 'D'))
+	}
+	views := quantum.ViewsByTimeRange(StandardView, start, end, "D")
+	return r.ops.Shards(views...)
+}
+
+func sameDate(a, b time.Time) bool {
+	y, m, d := a.Date()
+	yy, mm, dd := b.Date()
+	return dd == d && mm == m && yy == y
+}
+
+func (r *Reader[T]) Rows(field, view string, shard uint64, o *roaring64.Bitmap, opts *RowsOption) error {
 	var column uint64
 	if opts != nil && opts.Column != 0 {
 		colShard := opts.Column >> shardwidth.Exponent
@@ -130,7 +113,7 @@ func (r *Reader[T]) rowsShards(field, view string, shard uint64, o *roaring64.Bi
 	})
 }
 
-func (r *Reader[T]) distinctShard(field, view string, shard uint64, o *roaring64.Bitmap, filterBitmap *roaring.Bitmap) error {
+func (r *Reader[T]) Distinct(field, view string, shard uint64, o *roaring64.Bitmap, filterBitmap *roaring.Bitmap) error {
 	return r.cursor(ViewKey(field, view), shard, func(c *rbf.Cursor, tr *tr.Read) error {
 		fragData := c.Iterator()
 
