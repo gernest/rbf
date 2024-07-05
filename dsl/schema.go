@@ -69,10 +69,15 @@ type Schema[T proto.Message] struct {
 }
 
 func (s *Store[T]) Schema() (*Schema[T], error) {
+	w, err := s.ops.write()
+	if err != nil {
+		return nil, err
+	}
 	var a T
 	st := &Schema[T]{
 		store:  s,
 		shards: make(Shards),
+		ops:    w,
 		fields: a.ProtoReflect().Descriptor().Fields(),
 	}
 	return st, st.validate(a)
@@ -164,7 +169,9 @@ func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 	msg.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 		name := string(fd.Name())
 		kind := fd.Kind()
-		writers[kind](vs.get(s.views[0]).get(name), s.ops.tr, fd, id, v)
+		b := vs.get(s.views[0]).get(name)
+		tr := s.ops.tr
+		writers[kind](b, tr, fd, id, v)
 		if kind == protoreflect.StringKind && len(s.views) > 1 {
 			// Search is generally done on string columns. Only create quantum views on
 			// string columns.

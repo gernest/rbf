@@ -73,3 +73,46 @@ func (b *Basic[T]) TestGenerateID() {
 	b.Require().NoError(err)
 	b.Require().Equal(want, ids)
 }
+
+func (b *Basic[T]) TestMultipleShards() {
+	schema, err := b.db.Schema()
+	b.Require().NoError(err)
+	defer schema.Release()
+	shards := make([]uint64, len(b.source))
+	want := make([]Shard, len(b.source))
+	wantID := make([][]uint64, len(b.source))
+	for i := range b.source {
+		id := uint64(i * rbf.ShardWidth)
+		shards[i] = uint64(id / rbf.ShardWidth)
+		want[i] = Shard{
+			Shard: shards[i],
+			Views: []string{StandardView},
+		}
+		wantID[i] = []uint64{id}
+		schema.write(id, b.source[i].ProtoReflect())
+	}
+	b.Require().NoError(schema.Save())
+	r, err := b.db.ops.read()
+	b.Require().NoError(err)
+	defer r.Release()
+	b.Require().Equal(want, r.Shards(StandardView))
+	ids := [][]uint64{}
+	for i := range shards {
+		err = b.db.DB().View(shards[i], func(tx *rbf.Tx) error {
+			c, err := tx.Cursor(ViewKey(ID, StandardView))
+			if err != nil {
+				return err
+			}
+			defer c.Close()
+
+			r, err := cursor.Row(c, shards[i], 0)
+			if err != nil {
+				return err
+			}
+			ids = append(ids, r.Columns())
+			return nil
+		})
+		b.Require().NoError(err, shards[i])
+	}
+	b.Require().Equal(wantID, ids)
+}
