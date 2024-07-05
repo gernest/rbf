@@ -160,22 +160,14 @@ func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 		s.views = append(s.views, quantum.ViewByTimeUnit(StandardView, ts, 'D'))
 	}
 	vs := s.shards.get(shard)
-
-	// We store ID as a mutex and support quantum search for it
-	vs.get(s.views[0]).get(ID).DirectAdd(id % shardwidth.ShardWidth)
-	if len(s.views) > 1 {
-		vs.get(s.views[1]).get(ID).DirectAdd(id % shardwidth.ShardWidth)
+	for i := range s.views {
+		vs.get(s.views[i]).get(ID).DirectAdd(id % shardwidth.ShardWidth)
 	}
 	msg.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 		name := string(fd.Name())
 		kind := fd.Kind()
-		b := vs.get(s.views[0]).get(name)
-		tr := s.ops.tr
-		writers[kind](b, tr, fd, id, v)
-		if kind == protoreflect.StringKind && len(s.views) > 1 {
-			// Search is generally done on string columns. Only create quantum views on
-			// string columns.
-			writers[kind](vs.get(s.views[1]).get(name), s.ops.tr, fd, id, v)
+		for i := range s.views {
+			writers[kind](vs.get(s.views[i]).get(name), s.ops.tr, fd, id, v)
 		}
 		return true
 	})
