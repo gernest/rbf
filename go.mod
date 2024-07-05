@@ -8,6 +8,7 @@ require (
 	github.com/blevesearch/vellum v1.0.10
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/davecgh/go-spew v1.1.1
+	github.com/dgraph-io/ristretto v0.1.1
 	github.com/felixge/fgprof v0.9.4
 	github.com/gernest/roaring v0.22.3
 	github.com/gernest/rows v1.22.9
@@ -25,6 +26,8 @@ require (
 require (
 	github.com/bits-and-blooms/bitset v1.12.0 // indirect
 	github.com/blevesearch/mmap-go v1.0.4 // indirect
+	github.com/dustin/go-humanize v1.0.0 // indirect
+	github.com/golang/glog v1.2.1 // indirect
 	github.com/google/pprof v0.0.0-20240227163752-401108e1b7e7 // indirect
 	github.com/molecula/apophenia v0.0.0-20190827192002-68b7a14a478b // indirect
 	github.com/mschoch/smat v0.2.0 // indirect

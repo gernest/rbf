@@ -18,6 +18,17 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
+// Reader creates a new Reader for querying the store T. Make sure the reader is
+// released after use.
+func (s *Store[T]) Reader() (*Reader[T], error) {
+	r, err := s.ops.read()
+	if err != nil {
+		return nil, err
+	}
+	var a T
+	return &Reader[T]{store: s, ops: r, fields: a.ProtoReflect().Descriptor().Fields()}, nil
+}
+
 type Reader[T proto.Message] struct {
 	store  *Store[T]
 	ops    *readOps
@@ -108,7 +119,7 @@ func (r *Reader[T]) rowsShards(field, view string, shard uint64, o *roaring64.Bi
 }
 
 func (r *Reader[T]) cursor(view string, shard uint64, f func(c *rbf.Cursor, tr *tr.Read) error) error {
-	return r.store.shards.View2(shard, func(tx *rbf.Tx, tr *tr.Read) error {
+	return r.store.db.View(shard, func(tx *rbf.Tx) error {
 		c, err := tx.Cursor(view)
 		if err != nil {
 			if errors.Is(err, rbf.ErrBitmapNotFound) {
@@ -117,6 +128,6 @@ func (r *Reader[T]) cursor(view string, shard uint64, f func(c *rbf.Cursor, tr *
 			return err
 		}
 		defer c.Close()
-		return f(c, tr)
+		return f(c, r.ops.tr)
 	})
 }

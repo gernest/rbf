@@ -210,7 +210,7 @@ func (s *Schema[T]) Save() error {
 	defer s.Release()
 	m := map[string]*roaring.Bitmap{}
 	err := s.Range(func(shard uint64, views Views) error {
-		return s.store.shards.Update(shard, func(tx *rbf.Tx) error {
+		return s.store.db.Update(shard, func(tx *rbf.Tx) error {
 			for view, fields := range views {
 				b, ok := m[view]
 				if !ok {

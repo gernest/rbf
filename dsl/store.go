@@ -8,8 +8,8 @@ import (
 )
 
 type Store[T proto.Message] struct {
-	shards *db.Shards
-	ops    *Ops
+	db  *db.Shards
+	ops *Ops
 }
 
 func New[T proto.Message](path string) (*Store[T], error) {
@@ -17,13 +17,19 @@ func New[T proto.Message](path string) (*Store[T], error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Store[T]{shards: db.New(path), ops: o}, nil
+	db, err := db.New(path)
+	if err != nil {
+		o.Close()
+		return nil, err
+	}
+
+	return &Store[T]{db: db, ops: o}, nil
 }
 
 func (s *Store[T]) Close() error {
-	return errors.Join(s.shards.Close(), s.ops.db.Close())
+	return errors.Join(s.db.Close(), s.ops.Close())
 }
 
 func (s *Store[T]) DB() *db.Shards {
-	return s.shards
+	return s.db
 }
