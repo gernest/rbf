@@ -1,4 +1,4 @@
-package mutex
+package sets
 
 import (
 	"github.com/RoaringBitmap/roaring/roaring64"
@@ -8,7 +8,7 @@ import (
 	"github.com/gernest/roaring"
 )
 
-func Distinct(txn *tx.Tx, field string, start uint64, o *roaring64.Bitmap, filters ...roaring.BitmapFilter) error {
+func Rows(txn *tx.Tx, field string, start uint64, o *roaring64.Bitmap, filters ...roaring.BitmapFilter) error {
 	return txn.Cursor(field, func(c *rbf.Cursor, tx *tx.Tx) error {
 		return cursor.Rows(c, start, func(row uint64) error {
 			o.Add(row)
