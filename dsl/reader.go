@@ -1,18 +1,13 @@
 package dsl
 
 import (
-	"errors"
 	"time"
 
-	"github.com/RoaringBitmap/roaring/roaring64"
 	"github.com/gernest/rbf"
-	"github.com/gernest/rbf/dsl/cursor"
-	"github.com/gernest/rbf/dsl/tr"
+	"github.com/gernest/rbf/dsl/tx"
 	"github.com/gernest/rbf/quantum"
-	"github.com/gernest/roaring"
 	"github.com/gernest/roaring/shardwidth"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 const (
@@ -34,23 +29,16 @@ func (s *Store[T]) Reader() (*Reader[T], error) {
 	if err != nil {
 		return nil, err
 	}
-	var a T
-	return &Reader[T]{store: s, ops: r, fields: a.ProtoReflect().Descriptor().Fields()}, nil
+	return &Reader[T]{store: s, ops: r}, nil
 }
 
 type Reader[T proto.Message] struct {
-	store  *Store[T]
-	ops    *readOps
-	fields protoreflect.FieldDescriptors
+	store *Store[T]
+	ops   *readOps
 }
 
-type RowsOption struct {
-	Like     string
-	Column   uint64
-	Limit    uint64
-	From     time.Time
-	To       time.Time
-	Previous uint64
+func (r *Reader[T]) Release() error {
+	return r.ops.Release()
 }
 
 // Standard returns the standard shard. Use this to query global data
@@ -71,106 +59,30 @@ func (r Reader[T]) Range(start, end time.Time) []Shard {
 	return r.ops.Shards(views...)
 }
 
-func sameDate(a, b time.Time) bool {
-	y, m, d := a.Date()
-	yy, mm, dd := b.Date()
-	return dd == d && mm == m && yy == y
-}
-
-func (r *Reader[T]) Rows(field, view string, shard uint64, o *roaring64.Bitmap, opts *RowsOption) error {
-	var column uint64
-	if opts != nil && opts.Column != 0 {
-		colShard := opts.Column >> shardwidth.Exponent
-		if colShard != shard {
-			return nil
+func (r *Reader[T]) View(shard Shard, f func(txn *tx.Tx) error) error {
+	return r.store.db.View(shard.Shard, func(txn *rbf.Tx) error {
+		rx, err := r.store.ops.read()
+		if err != nil {
+			return err
 		}
-	}
-	var limit uint64
-	if opts != nil && opts.Limit != 0 {
-		limit = opts.Limit
-	}
-	return r.cursor(ViewKey(field, view), shard, func(c *rbf.Cursor, tr *tr.Read) error {
-		filters := []roaring.BitmapFilter{}
-		if column != 0 {
-			filters = append(filters, roaring.NewBitmapColumnFilter(column))
-		}
-		if limit != 0 {
-			filters = append(filters, roaring.NewBitmapRowLimitFilter(opts.Limit))
-		}
-		if opts != nil && opts.Like != "" {
-			return tr.SearchRe(field, opts.Like, nil, nil, func(_ []byte, value uint64) {
-				o.Add(value)
+		defer rx.Release()
+		for _, view := range shard.Views {
+			err := f(&tx.Tx{
+				Tx:    txn,
+				Shard: shard.Shard,
+				View:  view,
+				Tr:    rx.tr,
 			})
-		}
-		var start uint64
-		if opts != nil {
-			start = opts.Previous
-		}
-		return cursor.Rows(c, start, func(row uint64) error {
-			o.Add(row)
-			return nil
-		}, filters...)
-	})
-}
-
-func (r *Reader[T]) Distinct(field, view string, shard uint64, o *roaring64.Bitmap, filterBitmap *roaring.Bitmap) error {
-	return r.cursor(ViewKey(field, view), shard, func(c *rbf.Cursor, tr *tr.Read) error {
-		fragData := c.Iterator()
-
-		// We can't grab the containers "for each row" from the set-type field,
-		// because we don't know how many rows there are, and some of them
-		// might be empty, so really, we're going to iterate through the
-		// containers, and then intersect them with the filter if present.
-		var filter []*roaring.Container
-		if filterBitmap != nil {
-			filter = make([]*roaring.Container, 1<<shardVsContainerExponent)
-			filterIterator, _ := filterBitmap.Containers.Iterator(0)
-			// So let's get these all with a nice convenient 0 offset...
-			for filterIterator.Next() {
-				k, c := filterIterator.Value()
-				if c.N() == 0 {
-					continue
-				}
-				filter[k%(1<<shardVsContainerExponent)] = c
-			}
-		}
-		prevRow := ^uint64(0)
-		seenThisRow := false
-		for fragData.Next() {
-			k, c := fragData.Value()
-			row := k >> shardVsContainerExponent
-			if row == prevRow {
-				if seenThisRow {
-					continue
-				}
-			} else {
-				seenThisRow = false
-				prevRow = row
-			}
-			if filterBitmap != nil {
-				if roaring.IntersectionAny(c, filter[k%(1<<shardVsContainerExponent)]) {
-					o.Add(row)
-					seenThisRow = true
-				}
-			} else if c.N() != 0 {
-				o.Add(row)
-				seenThisRow = true
+			if err != nil {
+				return err
 			}
 		}
 		return nil
 	})
 }
 
-func (r *Reader[T]) cursor(view string, shard uint64, f func(c *rbf.Cursor, tr *tr.Read) error) error {
-	return r.store.db.View(shard, func(tx *rbf.Tx) error {
-		c, err := tx.Cursor(view)
-		if err != nil {
-			if errors.Is(err, rbf.ErrBitmapNotFound) {
-				return nil
-			}
-			return err
-		}
-		defer c.Close()
-		return f(c, r.ops.tr)
-	})
+func sameDate(a, b time.Time) bool {
+	y, m, d := a.Date()
+	yy, mm, dd := b.Date()
+	return dd == d && mm == m && yy == y
 }
