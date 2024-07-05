@@ -6,8 +6,9 @@ option go_package = "github.com/gernest/rbf/dsl/kase";
 message Mutex {
   Enum mutex = 1;
   enum Enum {
-    zero = 0;
-    one = 1;
+    none = 0;
+    zero = 1;
+    one = 2;
   }
 }
 
