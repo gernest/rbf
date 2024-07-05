@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/gernest/rbf"
+	"github.com/gernest/rbf/dsl/tr"
 	"github.com/gernest/rbf/dsl/tx"
 	"github.com/gernest/rbf/quantum"
 	"github.com/gernest/roaring/shardwidth"
@@ -48,6 +49,10 @@ func (r Reader[T]) Standard() Shard {
 		return a[0]
 	}
 	return Shard{}
+}
+
+func (r *Reader[T]) Tr() *tr.Read {
+	return r.ops.tr
 }
 
 // Range returns shards for the time range.
