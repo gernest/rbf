@@ -21,6 +21,7 @@ const (
 	StandardView   = "standard"
 	Quantum        = "20060102"
 	TimestampField = protoreflect.Name("timestamp")
+	ID             = "_id"
 )
 
 type Fields map[string]*roaring.Bitmap
@@ -154,6 +155,12 @@ func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 		s.views = append(s.views, quantum.ViewByTimeUnit(StandardView, ts, 'D'))
 	}
 	vs := s.shards.get(shard)
+
+	// We store ID as a mutex and support quantum search for it
+	vs.get(s.views[0]).get(ID).DirectAdd(id % shardwidth.ShardWidth)
+	if len(s.views) > 1 {
+		vs.get(s.views[1]).get(ID).DirectAdd(id % shardwidth.ShardWidth)
+	}
 	msg.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 		name := string(fd.Name())
 		kind := fd.Kind()

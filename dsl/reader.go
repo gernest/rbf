@@ -42,7 +42,10 @@ func (r *Reader[T]) Rows(field string, opts *RowsOption) (query.IDs, error) {
 	case protoreflect.EnumKind:
 	case protoreflect.StringKind:
 	default:
-		return nil, fmt.Errorf("field %v does not support Rows", f.Kind())
+		if field != ID {
+			return nil, fmt.Errorf("field %v does not support Rows", f.Kind())
+		}
+		// ID is a special existence mutex field.
 	}
 	views := []string{StandardView}
 	if opts != nil && !opts.From.IsZero() && !opts.To.IsZero() {
