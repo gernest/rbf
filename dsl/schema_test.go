@@ -156,8 +156,9 @@ func (s *StringTest) TestVellum() {
 	s.Require().NoError(err)
 	defer r.Release()
 	m := map[string]uint64{}
-	err = r.Tr().Search("string", &vellum.AlwaysMatch{}, nil, nil, func(key []byte, value uint64) {
+	err = r.Tr().Search("string", &vellum.AlwaysMatch{}, nil, nil, func(key []byte, value uint64) error {
 		m[string(key)] = value
+		return nil
 	})
 	s.Require().NoError(err)
 	want := map[string]uint64{
@@ -200,8 +201,9 @@ func (s *StringSetTest) TestVellum() {
 	s.Require().NoError(err)
 	defer r.Release()
 	m := map[string]uint64{}
-	err = r.Tr().Search("string", &vellum.AlwaysMatch{}, nil, nil, func(key []byte, value uint64) {
+	err = r.Tr().Search("string", &vellum.AlwaysMatch{}, nil, nil, func(key []byte, value uint64) error {
 		m[string(key)] = value
+		return nil
 	})
 	s.Require().NoError(err)
 	want := map[string]uint64{

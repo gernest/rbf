@@ -65,8 +65,9 @@ func TestTr(t *testing.T) {
 		defer r.Release()
 
 		got := map[string]uint64{}
-		err = r.Search(field, &vellum.AlwaysMatch{}, nil, nil, func(key []byte, value uint64) {
+		err = r.Search(field, &vellum.AlwaysMatch{}, nil, nil, func(key []byte, value uint64) error {
 			got[string(key)] = value
+			return nil
 		})
 		require.NoError(t, err)
 		want := map[string]uint64{"0": 0x1, "1": 0x2, "2": 0x3, "3": 0x4, "4": 0x5}
@@ -127,8 +128,9 @@ func TestBlob(t *testing.T) {
 		defer r.Release()
 
 		got := map[string]uint64{}
-		err = r.Search(field, &vellum.AlwaysMatch{}, nil, nil, func(key []byte, value uint64) {
+		err = r.Search(field, &vellum.AlwaysMatch{}, nil, nil, func(key []byte, value uint64) error {
 			got[string(key)] = value
+			return nil
 		})
 		require.NoError(t, err)
 		want := map[string]uint64{}

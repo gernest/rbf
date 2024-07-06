@@ -335,7 +335,7 @@ func (r *Read) SearchRe(field string, like string, start, end []byte, match func
 	}
 	return nil
 }
-func (r *Read) Search(field string, a vellum.Automaton, start, end []byte, match func(key []byte, value uint64)) error {
+func (r *Read) Search(field string, a vellum.Automaton, start, end []byte, match func(key []byte, value uint64) error) error {
 	b := r.fst.Get([]byte(field))
 	if b == nil {
 		return nil
@@ -346,7 +346,10 @@ func (r *Read) Search(field string, a vellum.Automaton, start, end []byte, match
 	}
 	it, err := fst.Search(a, start, end)
 	for err == nil {
-		match(it.Current())
+		err = match(it.Current())
+		if err != nil {
+			return err
+		}
 		err = it.Next()
 	}
 	return nil
