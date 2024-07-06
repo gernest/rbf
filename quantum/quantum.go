@@ -96,14 +96,14 @@ var lengthsByQuantum = []int{
 	'H': 10,
 }
 
-// viewsByTimeInto computes the list of views for a given time. It expects
+// ViewsByTimeInto computes the list of views for a given time. It expects
 // to be given an initial buffer of the form `name_YYYYMMDDHH`, and a slice
 // of []bytes. This allows us to reuse the buffer for all the sub-buffers,
 // and also to reuse the slice of slices, to eliminate all those allocations.
 // This might seem crazy, but even including the JSON parsing and all the
 // disk activity, the straightforward viewsByTime implementation was 25%
 // of runtime in an ingest test.
-func viewsByTimeInto(fullBuf []byte, into [][]byte, t time.Time, q TimeQuantum) [][]byte {
+func ViewsByTimeInto(fullBuf []byte, into [][]byte, t time.Time, q TimeQuantum) [][]byte {
 	l := len(fullBuf) - 10
 	date := fullBuf[l : l+10]
 	y, m, d := t.Date()

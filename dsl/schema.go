@@ -22,6 +22,12 @@ const (
 	Quantum        = "20060102"
 	TimestampField = protoreflect.Name("timestamp")
 	ID             = "_id"
+
+	// It might be excessive but our goal is to be extremely useful and by having
+	// database per shard we can afford being this granular
+	//
+	// Timeseries endpoints for vince requires
+	IngestQuantum = "YMDH"
 )
 
 type Fields map[string]*roaring.Bitmap
@@ -61,11 +67,13 @@ type Writers map[string]writeFn
 
 // Schema maps proto fields to rbf types.
 type Schema[T proto.Message] struct {
-	store  *Store[T]
-	ops    *writeOps
-	shards Shards
-	fields protoreflect.FieldDescriptors
-	views  []string
+	store         *Store[T]
+	ops           *writeOps
+	shards        Shards
+	fields        protoreflect.FieldDescriptors
+	timeStringBuf []byte
+	timeViews     [][]byte
+	hasTime       bool
 }
 
 func (s *Store[T]) Schema() (*Schema[T], error) {
@@ -80,6 +88,24 @@ func (s *Store[T]) Schema() (*Schema[T], error) {
 		ops:    w,
 		fields: a.ProtoReflect().Descriptor().Fields(),
 	}
+	if a.ProtoReflect().Descriptor().Fields().ByName(TimestampField) != nil {
+		st.hasTime = true
+		// We're supporting time quantums, so we need to store bits in a
+		// number of views for every entry with a timestamp. We want to compute
+		// time quantum view names for whatever combination of YMDH views
+		// we have. But we don't want to allocate four strings per entry, or
+		// recompute and recreate the entire string. We know that only the
+		// YYYYMMDDHH part of the string changes over time.
+		st.timeStringBuf = make([]byte, len(StandardView)+11)
+		copy(st.timeStringBuf, []byte(StandardView))
+		copy(st.timeStringBuf[len(StandardView):], []byte("_YYYYMMDDHH"))
+		// Now we have a buffer that contains
+		// `standard_YYYYMMDDHH`. We also need storage space to hold several
+		// slice headers, one per entry in q. These will hold the view names
+		// corresponding to each letter in q.
+		st.timeViews = make([][]byte, len(IngestQuantum))
+	}
+
 	return st, st.validate(a)
 }
 
@@ -145,29 +171,35 @@ func (s *Schema[T]) Write(msg T) error {
 
 func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 	shard := id / shardwidth.ShardWidth
-	tsField := msg.Descriptor().Fields().ByName(TimestampField)
 
 	// all fields go to standard view. There is no need to differentiate between
 	// bsi and non bsi because we use generics and T ensures we work with actual
 	// field types.
-	s.views = append(s.views[:0], StandardView)
 
-	if tsField != nil {
+	if s.hasTime {
+		tsField := msg.Descriptor().Fields().ByName(TimestampField)
 		// We support historical data. To avoid touching shards that don't have
 		// relevant data we create quantum views that only apply to string or string
 		// set columns.
 		ts := timeQuantum[tsField.Kind()](msg.Get(tsField))
-		s.views = append(s.views, quantum.ViewByTimeUnit(StandardView, ts, 'D'))
+		s.timeViews = quantum.ViewsByTimeInto(s.timeStringBuf, s.timeViews, ts.UTC(), IngestQuantum)
 	}
 	vs := s.shards.get(shard)
-	for i := range s.views {
-		vs.get(s.views[i]).get(ID).DirectAdd(id % shardwidth.ShardWidth)
+	idBit := id % shardwidth.ShardWidth
+	vs.get(StandardView).get(ID).DirectAdd(idBit)
+	if s.hasTime {
+		for i := range s.timeViews {
+			vs.get(string(s.timeViews[i])).get(ID).DirectAdd(idBit)
+		}
 	}
 	msg.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 		name := string(fd.Name())
 		kind := fd.Kind()
-		for i := range s.views {
-			writers[kind](vs.get(s.views[i]).get(name), s.ops.tr, fd, id, v)
+		writers[kind](vs.get(StandardView).get(name), s.ops.tr, fd, id, v)
+		if s.hasTime {
+			for i := range s.timeViews {
+				writers[kind](vs.get(string(s.timeViews[i])).get(name), s.ops.tr, fd, id, v)
+			}
 		}
 		return true
 	})

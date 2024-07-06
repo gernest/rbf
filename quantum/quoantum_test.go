@@ -78,7 +78,7 @@ func TestViewsByTimeInto(t *testing.T) {
 
 	t.Run("YMDH", func(t *testing.T) {
 		a := ViewsByTime("F", ts, mustParseTimeQuantum("YMDH"))
-		b := viewsByTimeInto(s, timeViews, ts, mustParseTimeQuantum("YMDH"))
+		b := ViewsByTimeInto(s, timeViews, ts, mustParseTimeQuantum("YMDH"))
 		if len(a) != len(b) {
 			t.Fatalf("mismatch: viewsByTime: %q, viewsByTimeInto: %q", a, b)
 		}
@@ -91,7 +91,7 @@ func TestViewsByTimeInto(t *testing.T) {
 
 	t.Run("D", func(t *testing.T) {
 		a := ViewsByTime("F", ts, mustParseTimeQuantum("D"))
-		b := viewsByTimeInto(s, timeViews, ts, mustParseTimeQuantum("D"))
+		b := ViewsByTimeInto(s, timeViews, ts, mustParseTimeQuantum("D"))
 		if len(a) != len(b) {
 			t.Fatalf("mismatch: viewsByTime: %q, viewsByTimeInto: %q", a, b)
 		}
