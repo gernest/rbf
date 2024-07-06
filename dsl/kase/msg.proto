@@ -18,7 +18,7 @@ message BSI {
 }
 
 message Bool { bool bool = 1; }
-message String { bool string = 1; }
+message String { string string = 1; }
 message Blob { bytes blob = 1; }
 
 message Set {

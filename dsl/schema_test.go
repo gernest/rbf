@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blevesearch/vellum"
 	"github.com/gernest/rbf"
 	"github.com/gernest/rbf/dsl/bsi"
 	"github.com/gernest/rbf/dsl/cursor"
@@ -120,6 +121,50 @@ func (b *Basic[T]) TestMultipleShards() {
 		b.Require().NoError(err, shards[i])
 	}
 	b.Require().Equal(wantID, ids)
+}
+
+func TestString(t *testing.T) {
+	suite.Run(t, newString())
+}
+
+type StringTest struct {
+	Basic[*kase.String]
+}
+
+func newString() *StringTest {
+	return &StringTest{
+		Basic: Basic[*kase.String]{
+			source: []*kase.String{
+				{String_: "hello"},
+				{String_: "world"},
+				{String_: ""},
+			},
+		},
+	}
+}
+
+func (s *StringTest) TestVellum() {
+
+	schema, err := s.db.Schema()
+	s.Require().NoError(err)
+	for i := range s.source {
+		schema.Write(s.source[i])
+	}
+	s.Require().NoError(schema.Save())
+
+	r, err := s.db.Reader()
+	s.Require().NoError(err)
+	defer r.Release()
+	m := map[string]uint64{}
+	err = r.Tr().Search("string", &vellum.AlwaysMatch{}, nil, nil, func(key []byte, value uint64) {
+		m[string(key)] = value
+	})
+	s.Require().NoError(err)
+	want := map[string]uint64{
+		"hello": 1,
+		"world": 2,
+	}
+	s.Require().Equal(want, m)
 }
 
 func TestTimeseries(t *testing.T) {
