@@ -21,10 +21,8 @@ message Bool { bool bool = 1; }
 message String { string string = 1; }
 message Blob { bytes blob = 1; }
 
-message Set {
-  repeated string string = 1;
-  repeated bytes uint64 = 2;
-}
+message StringSet { repeated string string = 1; }
+message BlobSet { repeated bytes uint64 = 1; }
 
 message TimestampMS { int64 timestamp = 1; }
 message TimestampNS { uint64 timestamp = 1; }

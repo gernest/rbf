@@ -167,6 +167,50 @@ func (s *StringTest) TestVellum() {
 	s.Require().Equal(want, m)
 }
 
+func TestStringSet(t *testing.T) {
+	suite.Run(t, newStringSet())
+}
+
+type StringSetTest struct {
+	Basic[*kase.StringSet]
+}
+
+func newStringSet() *StringSetTest {
+	return &StringSetTest{
+		Basic: Basic[*kase.StringSet]{
+			source: []*kase.StringSet{
+				{String_: []string{"hello"}},
+				{String_: []string{"world"}},
+				{},
+			},
+		},
+	}
+}
+
+func (s *StringSetTest) TestVellum() {
+
+	schema, err := s.db.Schema()
+	s.Require().NoError(err)
+	for i := range s.source {
+		schema.Write(s.source[i])
+	}
+	s.Require().NoError(schema.Save())
+
+	r, err := s.db.Reader()
+	s.Require().NoError(err)
+	defer r.Release()
+	m := map[string]uint64{}
+	err = r.Tr().Search("string", &vellum.AlwaysMatch{}, nil, nil, func(key []byte, value uint64) {
+		m[string(key)] = value
+	})
+	s.Require().NoError(err)
+	want := map[string]uint64{
+		"hello": 1,
+		"world": 2,
+	}
+	s.Require().Equal(want, m)
+}
+
 func TestTimeseries(t *testing.T) {
 	db, err := New[*kase.TimestampMS](t.TempDir())
 	require.NoError(t, err)

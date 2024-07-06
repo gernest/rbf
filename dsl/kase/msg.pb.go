@@ -312,17 +312,16 @@ func (x *Blob) GetBlob() []byte {
 	return nil
 }
 
-type Set struct {
+type StringSet struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
 	String_ []string `protobuf:"bytes,1,rep,name=string,proto3" json:"string,omitempty"`
-	Uint64  [][]byte `protobuf:"bytes,2,rep,name=uint64,proto3" json:"uint64,omitempty"`
 }
 
-func (x *Set) Reset() {
-	*x = Set{}
+func (x *StringSet) Reset() {
+	*x = StringSet{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_msg_proto_msgTypes[5]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -330,13 +329,13 @@ func (x *Set) Reset() {
 	}
 }
 
-func (x *Set) String() string {
+func (x *StringSet) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Set) ProtoMessage() {}
+func (*StringSet) ProtoMessage() {}
 
-func (x *Set) ProtoReflect() protoreflect.Message {
+func (x *StringSet) ProtoReflect() protoreflect.Message {
 	mi := &file_msg_proto_msgTypes[5]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -348,19 +347,59 @@ func (x *Set) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Set.ProtoReflect.Descriptor instead.
-func (*Set) Descriptor() ([]byte, []int) {
+// Deprecated: Use StringSet.ProtoReflect.Descriptor instead.
+func (*StringSet) Descriptor() ([]byte, []int) {
 	return file_msg_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *Set) GetString_() []string {
+func (x *StringSet) GetString_() []string {
 	if x != nil {
 		return x.String_
 	}
 	return nil
 }
 
-func (x *Set) GetUint64() [][]byte {
+type BlobSet struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Uint64 [][]byte `protobuf:"bytes,1,rep,name=uint64,proto3" json:"uint64,omitempty"`
+}
+
+func (x *BlobSet) Reset() {
+	*x = BlobSet{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_msg_proto_msgTypes[6]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *BlobSet) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BlobSet) ProtoMessage() {}
+
+func (x *BlobSet) ProtoReflect() protoreflect.Message {
+	mi := &file_msg_proto_msgTypes[6]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BlobSet.ProtoReflect.Descriptor instead.
+func (*BlobSet) Descriptor() ([]byte, []int) {
+	return file_msg_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *BlobSet) GetUint64() [][]byte {
 	if x != nil {
 		return x.Uint64
 	}
@@ -378,7 +417,7 @@ type TimestampMS struct {
 func (x *TimestampMS) Reset() {
 	*x = TimestampMS{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_msg_proto_msgTypes[6]
+		mi := &file_msg_proto_msgTypes[7]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -391,7 +430,7 @@ func (x *TimestampMS) String() string {
 func (*TimestampMS) ProtoMessage() {}
 
 func (x *TimestampMS) ProtoReflect() protoreflect.Message {
-	mi := &file_msg_proto_msgTypes[6]
+	mi := &file_msg_proto_msgTypes[7]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -404,7 +443,7 @@ func (x *TimestampMS) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimestampMS.ProtoReflect.Descriptor instead.
 func (*TimestampMS) Descriptor() ([]byte, []int) {
-	return file_msg_proto_rawDescGZIP(), []int{6}
+	return file_msg_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *TimestampMS) GetTimestamp() int64 {
@@ -425,7 +464,7 @@ type TimestampNS struct {
 func (x *TimestampNS) Reset() {
 	*x = TimestampNS{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_msg_proto_msgTypes[7]
+		mi := &file_msg_proto_msgTypes[8]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -438,7 +477,7 @@ func (x *TimestampNS) String() string {
 func (*TimestampNS) ProtoMessage() {}
 
 func (x *TimestampNS) ProtoReflect() protoreflect.Message {
-	mi := &file_msg_proto_msgTypes[7]
+	mi := &file_msg_proto_msgTypes[8]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -451,7 +490,7 @@ func (x *TimestampNS) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimestampNS.ProtoReflect.Descriptor instead.
 func (*TimestampNS) Descriptor() ([]byte, []int) {
-	return file_msg_proto_rawDescGZIP(), []int{7}
+	return file_msg_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *TimestampNS) GetTimestamp() uint64 {
@@ -479,18 +518,19 @@ var file_msg_proto_rawDesc = []byte{
 	0x0a, 0x06, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06,
 	0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x1a, 0x0a, 0x04, 0x42, 0x6c, 0x6f, 0x62, 0x12, 0x12,
 	0x0a, 0x04, 0x62, 0x6c, 0x6f, 0x62, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x04, 0x62, 0x6c,
-	0x6f, 0x62, 0x22, 0x35, 0x0a, 0x03, 0x53, 0x65, 0x74, 0x12, 0x16, 0x0a, 0x06, 0x73, 0x74, 0x72,
-	0x69, 0x6e, 0x67, 0x18, 0x01, 0x20, 0x03, 0x28, 0x09, 0x52, 0x06, 0x73, 0x74, 0x72, 0x69, 0x6e,
-	0x67, 0x12, 0x16, 0x0a, 0x06, 0x75, 0x69, 0x6e, 0x74, 0x36, 0x34, 0x18, 0x02, 0x20, 0x03, 0x28,
-	0x0c, 0x52, 0x06, 0x75, 0x69, 0x6e, 0x74, 0x36, 0x34, 0x22, 0x2b, 0x0a, 0x0b, 0x54, 0x69, 0x6d,
-	0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x4d, 0x53, 0x12, 0x1c, 0x0a, 0x09, 0x74, 0x69, 0x6d, 0x65,
-	0x73, 0x74, 0x61, 0x6d, 0x70, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x09, 0x74, 0x69, 0x6d,
-	0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x22, 0x2b, 0x0a, 0x0b, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74,
-	0x61, 0x6d, 0x70, 0x4e, 0x53, 0x12, 0x1c, 0x0a, 0x09, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61,
-	0x6d, 0x70, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x09, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x74,
-	0x61, 0x6d, 0x70, 0x42, 0x21, 0x5a, 0x1f, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f,
-	0x6d, 0x2f, 0x67, 0x65, 0x72, 0x6e, 0x65, 0x73, 0x74, 0x2f, 0x72, 0x62, 0x66, 0x2f, 0x64, 0x73,
-	0x6c, 0x2f, 0x6b, 0x61, 0x73, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x6f, 0x62, 0x22, 0x23, 0x0a, 0x09, 0x53, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x53, 0x65, 0x74, 0x12,
+	0x16, 0x0a, 0x06, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x18, 0x01, 0x20, 0x03, 0x28, 0x09, 0x52,
+	0x06, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x21, 0x0a, 0x07, 0x42, 0x6c, 0x6f, 0x62, 0x53,
+	0x65, 0x74, 0x12, 0x16, 0x0a, 0x06, 0x75, 0x69, 0x6e, 0x74, 0x36, 0x34, 0x18, 0x01, 0x20, 0x03,
+	0x28, 0x0c, 0x52, 0x06, 0x75, 0x69, 0x6e, 0x74, 0x36, 0x34, 0x22, 0x2b, 0x0a, 0x0b, 0x54, 0x69,
+	0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x4d, 0x53, 0x12, 0x1c, 0x0a, 0x09, 0x74, 0x69, 0x6d,
+	0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x09, 0x74, 0x69,
+	0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x22, 0x2b, 0x0a, 0x0b, 0x54, 0x69, 0x6d, 0x65, 0x73,
+	0x74, 0x61, 0x6d, 0x70, 0x4e, 0x53, 0x12, 0x1c, 0x0a, 0x09, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x74,
+	0x61, 0x6d, 0x70, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x09, 0x74, 0x69, 0x6d, 0x65, 0x73,
+	0x74, 0x61, 0x6d, 0x70, 0x42, 0x21, 0x5a, 0x1f, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63,
+	0x6f, 0x6d, 0x2f, 0x67, 0x65, 0x72, 0x6e, 0x65, 0x73, 0x74, 0x2f, 0x72, 0x62, 0x66, 0x2f, 0x64,
+	0x73, 0x6c, 0x2f, 0x6b, 0x61, 0x73, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -506,7 +546,7 @@ func file_msg_proto_rawDescGZIP() []byte {
 }
 
 var file_msg_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_msg_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_msg_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_msg_proto_goTypes = []interface{}{
 	(Mutex_Enum)(0),     // 0: kase.Mutex.Enum
 	(*Mutex)(nil),       // 1: kase.Mutex
@@ -514,9 +554,10 @@ var file_msg_proto_goTypes = []interface{}{
 	(*Bool)(nil),        // 3: kase.Bool
 	(*String)(nil),      // 4: kase.String
 	(*Blob)(nil),        // 5: kase.Blob
-	(*Set)(nil),         // 6: kase.Set
-	(*TimestampMS)(nil), // 7: kase.TimestampMS
-	(*TimestampNS)(nil), // 8: kase.TimestampNS
+	(*StringSet)(nil),   // 6: kase.StringSet
+	(*BlobSet)(nil),     // 7: kase.BlobSet
+	(*TimestampMS)(nil), // 8: kase.TimestampMS
+	(*TimestampNS)(nil), // 9: kase.TimestampNS
 }
 var file_msg_proto_depIdxs = []int32{
 	0, // 0: kase.Mutex.mutex:type_name -> kase.Mutex.Enum
@@ -594,7 +635,7 @@ func file_msg_proto_init() {
 			}
 		}
 		file_msg_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Set); i {
+			switch v := v.(*StringSet); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -606,7 +647,7 @@ func file_msg_proto_init() {
 			}
 		}
 		file_msg_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TimestampMS); i {
+			switch v := v.(*BlobSet); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -618,6 +659,18 @@ func file_msg_proto_init() {
 			}
 		}
 		file_msg_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*TimestampMS); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_msg_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*TimestampNS); i {
 			case 0:
 				return &v.state
@@ -636,7 +689,7 @@ func file_msg_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_msg_proto_rawDesc,
 			NumEnums:      1,
-			NumMessages:   8,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
