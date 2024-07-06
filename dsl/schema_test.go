@@ -5,9 +5,11 @@ import (
 	"time"
 
 	"github.com/gernest/rbf"
+	"github.com/gernest/rbf/dsl/bsi"
 	"github.com/gernest/rbf/dsl/cursor"
 	"github.com/gernest/rbf/dsl/kase"
 	"github.com/gernest/rbf/dsl/tx"
+	"github.com/gernest/rows"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/proto"
@@ -161,4 +163,25 @@ func TestTimeseries(t *testing.T) {
 		"standard_2000010203": {0x1},
 	}
 	require.Equal(t, ids, m)
+
+	// make sure timestamp field is set on all views
+	tsv := map[string][]int64{}
+	err = r.View(want[0], func(txn *tx.Tx) error {
+		return txn.Cursor("timestamp", func(c *rbf.Cursor, tx *tx.Tx) error {
+			return bsi.Extract(c, tx.Shard, rows.NewRow(1), func(column uint64, value int64) error {
+				tsv[tx.View] = []int64{value}
+				return nil
+			})
+		})
+	})
+	require.NoError(t, err)
+	value := ts.UnixMilli()
+	wantTs := map[string][]int64{
+		"standard":            {value},
+		"standard_2000":       {value},
+		"standard_200001":     {value},
+		"standard_20000102":   {value},
+		"standard_2000010203": {value},
+	}
+	require.Equal(t, wantTs, tsv)
 }
