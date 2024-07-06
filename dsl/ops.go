@@ -114,6 +114,33 @@ func (r *readOps) Shards(views ...string) []Shard {
 	return o
 }
 
+func (r *readOps) All() []Shard {
+	m := map[uint64][]string{}
+	r.views.ForEach(func(k, v []byte) error {
+		if v != nil {
+			r := roaring.NewBitmap()
+			r.UnmarshalBinary(v)
+			it := r.Iterator()
+			view := string(k)
+			for nxt, eof := it.Next(); !eof; nxt, eof = it.Next() {
+				m[nxt] = append(m[nxt], view)
+			}
+		}
+		return nil
+	})
+	o := make([]Shard, 0, len(m))
+	for s, v := range m {
+		slices.Sort(v)
+		o = append(o, Shard{
+			Shard: s, Views: slices.Compact(v),
+		})
+	}
+	slices.SortFunc(o, func(a, b Shard) int {
+		return cmp.Compare(a.Shard, b.Shard)
+	})
+	return o
+}
+
 func (o *Ops) write() (*writeOps, error) {
 	tx, err := o.db.Begin(true)
 	if err != nil {

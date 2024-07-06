@@ -183,6 +183,7 @@ func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 		// set columns.
 		ts := timeQuantum[tsField.Kind()](msg.Get(tsField))
 		s.timeViews = quantum.ViewsByTimeInto(s.timeStringBuf, s.timeViews, ts.UTC(), IngestQuantum)
+
 	}
 	vs := s.shards.get(shard)
 	idBit := id % shardwidth.ShardWidth

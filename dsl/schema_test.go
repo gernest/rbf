@@ -2,10 +2,13 @@ package dsl
 
 import (
 	"testing"
+	"time"
 
 	"github.com/gernest/rbf"
 	"github.com/gernest/rbf/dsl/cursor"
 	"github.com/gernest/rbf/dsl/kase"
+	"github.com/gernest/rbf/dsl/tx"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/proto"
 )
@@ -115,4 +118,47 @@ func (b *Basic[T]) TestMultipleShards() {
 		b.Require().NoError(err, shards[i])
 	}
 	b.Require().Equal(wantID, ids)
+}
+
+func TestTimeseries(t *testing.T) {
+	db, err := New[*kase.TimestampMS](t.TempDir())
+	require.NoError(t, err)
+	defer db.Close()
+	ts := time.Date(2000, time.January, 2, 3, 4, 5, 6, time.UTC)
+
+	err = db.Append([]*kase.TimestampMS{
+		{Timestamp: ts.UnixMilli()},
+	})
+	require.NoError(t, err)
+
+	r, err := db.Reader()
+	require.NoError(t, err)
+	defer r.Release()
+
+	want := []Shard{
+		{Shard: 0x0, Views: []string{"standard", "standard_2000", "standard_200001", "standard_20000102", "standard_2000010203"}},
+	}
+	require.Equal(t, want, r.ops.All())
+
+	// make sure ID is set for all views
+	m := map[string][]uint64{}
+	err = r.View(want[0], func(txn *tx.Tx) error {
+		return txn.Cursor(ID, func(c *rbf.Cursor, tx *tx.Tx) error {
+			r, err := cursor.Row(c, want[0].Shard, 0)
+			if err != nil {
+				return err
+			}
+			m[tx.View] = r.Columns()
+			return nil
+		})
+	})
+	require.NoError(t, err)
+	ids := map[string][]uint64{
+		"standard":            {0x1},
+		"standard_2000":       {0x1},
+		"standard_200001":     {0x1},
+		"standard_20000102":   {0x1},
+		"standard_2000010203": {0x1},
+	}
+	require.Equal(t, ids, m)
 }
