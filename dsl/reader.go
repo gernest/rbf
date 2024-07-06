@@ -7,20 +7,7 @@ import (
 	"github.com/gernest/rbf/dsl/tr"
 	"github.com/gernest/rbf/dsl/tx"
 	"github.com/gernest/rbf/quantum"
-	"github.com/gernest/roaring/shardwidth"
 	"google.golang.org/protobuf/proto"
-)
-
-const (
-	// shardVsContainerExponent is the power of 2 of ShardWith minus the power
-	// of two of roaring container width (which is 16).
-	// 2^shardVsContainerExponent is the number of containers in a shard row.
-	//
-	// It is represented in this rather awkward way because calculating the row
-	// which a given container is in means dividing by the number of rows per
-	// container which is performantly expressed as a right shift by this
-	// exponent.
-	shardVsContainerExponent = shardwidth.Exponent - 16
 )
 
 // Reader creates a new Reader for querying the store T. Make sure the reader is

@@ -640,7 +640,7 @@ func (c *Cursor) putLeafCellFast(in leafCell, isInsert bool) (err error) {
 // If the removal causes the leaf page to have no more elements then its entry
 // is removed from the parent. If the removal changes the first entry in the
 // leaf page then the entry will be updated in the parent branch page.
-func (c *Cursor) deleteLeafCell(key uint64) (err error) {
+func (c *Cursor) deleteLeafCell(_ uint64) (err error) {
 	elem := &c.stack.elems[c.stack.top]
 	leafPage, _, err := c.tx.readPage(elem.pgno)
 	if err != nil {
@@ -816,7 +816,7 @@ func (c *Cursor) updateBranchCell(stackIndex int, newKey uint64) (err error) {
 // exist in a branch page then it is removed. If an empty branch page is the
 // root page then it is converted to an empty leaf page as branch pages are not
 // allowed to be empty.
-func (c *Cursor) deleteBranchCell(stackIndex int, key uint64) (err error) {
+func (c *Cursor) deleteBranchCell(stackIndex int, _ uint64) (err error) {
 	elem := &c.stack.elems[stackIndex]
 
 	// Read branch page from disk. The current buffer is the leaf page.
