@@ -57,10 +57,14 @@ func (r *Reader[T]) Tr() *tr.Read {
 
 // Range returns shards for the time range.
 func (r Reader[T]) Range(start, end time.Time) []Shard {
+	return r.RangeUnit(start, end, 'D')
+}
+
+func (r Reader[T]) RangeUnit(start, end time.Time, unit rune) []Shard {
 	if sameDate(start, end) {
-		return r.ops.Shards(quantum.ViewByTimeUnit(StandardView, start, 'D'))
+		return r.ops.Shards(quantum.ViewByTimeUnit(StandardView, start, unit))
 	}
-	views := quantum.ViewsByTimeRange(StandardView, start, end, "D")
+	views := quantum.ViewsByTimeRange(StandardView, start, end, quantum.TimeQuantum(unit))
 	return r.ops.Shards(views...)
 }
 
