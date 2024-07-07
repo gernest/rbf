@@ -288,6 +288,8 @@ func BenchmarkSave(b *testing.B) {
 			Timestamp: ts.Add(time.Duration(i) * time.Hour).UnixMilli(),
 		}
 	}
+	b.ResetTimer()
+	b.ReportAllocs()
 	for range b.N {
 		_ = db.Append(msg)
 	}
