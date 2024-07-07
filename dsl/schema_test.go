@@ -276,3 +276,19 @@ func TestTimeseries(t *testing.T) {
 	}
 	require.Equal(t, wantTs, tsv)
 }
+
+func BenchmarkSave(b *testing.B) {
+	db, err := New[*kase.TimestampMS](b.TempDir())
+	require.NoError(b, err)
+	defer db.Close()
+	ts := time.Date(2000, time.January, 2, 3, 4, 5, 6, time.UTC)
+	msg := make([]*kase.TimestampMS, 4)
+	for i := range msg {
+		msg[i] = &kase.TimestampMS{
+			Timestamp: ts.Add(time.Duration(i) * time.Hour).UnixMilli(),
+		}
+	}
+	for range b.N {
+		_ = db.Append(msg)
+	}
+}
