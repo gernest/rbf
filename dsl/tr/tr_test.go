@@ -136,4 +136,12 @@ func TestBlob(t *testing.T) {
 		want := map[string]uint64{}
 		require.Equal(t, want, got)
 	})
+	t.Run("FindBlob", func(t *testing.T) {
+		r, err := f.Read()
+		require.NoError(t, err)
+		defer r.Release()
+		id, ok := r.FindBlob(field, []byte("3"))
+		require.True(t, ok)
+		require.Equal(t, uint64(4), id)
+	})
 }
