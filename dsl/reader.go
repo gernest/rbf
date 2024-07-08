@@ -42,9 +42,29 @@ func (r *Reader[T]) Tr() *tr.Read {
 	return r.ops.tr
 }
 
-// Range returns shards for the time range.
+// Range returns shards for the time range. We select possible views to read
+// from based on start and end.
+//
+// We Store Hour, Day, Month and Year Quantum.
 func (r Reader[T]) Range(start, end time.Time) []Shard {
-	return r.RangeUnit(start, end, 'D')
+	if end.Equal(start) {
+		return r.ops.Shards(quantum.ViewByTimeUnit(StandardView, start, 'H'))
+	}
+	start = start.Truncate(time.Hour)
+	end = end.Truncate(time.Hour)
+	diff := end.Sub(start)
+	switch {
+	case end.Equal(start):
+		return r.ops.Shards(quantum.ViewByTimeUnit(StandardView, start, 'H'))
+	case diff < (12 * time.Hour):
+		return r.RangeUnit(start, end, 'H')
+	case diff < (24 * 15 * time.Hour):
+		return r.RangeUnit(start, end, 'D')
+	case diff < (24 * 30 * 6 * time.Hour):
+		return r.RangeUnit(start, end, 'M')
+	default:
+		return r.RangeUnit(start, end, 'Y')
+	}
 }
 
 func (r Reader[T]) RangeUnit(start, end time.Time, unit rune) []Shard {
