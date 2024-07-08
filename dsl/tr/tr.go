@@ -2,12 +2,12 @@ package tr
 
 import (
 	"bytes"
+	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
 
 	"github.com/blevesearch/vellum"
 	"github.com/blevesearch/vellum/regexp"
-	"github.com/cespare/xxhash/v2"
 	"go.etcd.io/bbolt"
 )
 
@@ -211,13 +211,11 @@ func (w *Write) blob(field string, key []byte) (uint64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("ebf/tr: setup blob keys bucket %w", err)
 	}
-	hash := xxhash.Sum64(key)
 
-	var hk [8]byte
-	binary.BigEndian.PutUint64(hk[:], hash)
+	hash := sha512.Sum512_224(key)
 
 	// fast path: hey already translated.
-	if value := keys.Get(hk[:]); value != nil {
+	if value := keys.Get(hash[:]); value != nil {
 		return binary.BigEndian.Uint64(value), nil
 	}
 	ids, err := bucket(w.blobID, []byte(field))
@@ -231,7 +229,7 @@ func (w *Write) blob(field string, key []byte) (uint64, error) {
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], next)
 
-	err = keys.Put(hk[:], b[:])
+	err = keys.Put(hash[:], b[:])
 	if err != nil {
 		return 0, fmt.Errorf("ebf/tr: writing blob key %w", err)
 	}
@@ -249,20 +247,22 @@ func (f *File) Read() (*Read, error) {
 		return nil, err
 	}
 	return &Read{
-		tx:   tx,
-		keys: tx.Bucket(keys),
-		ids:  tx.Bucket(ids),
-		fst:  tx.Bucket(fst),
-		blob: tx.Bucket(blobID),
+		tx:       tx,
+		keys:     tx.Bucket(keys),
+		ids:      tx.Bucket(ids),
+		fst:      tx.Bucket(fst),
+		blobID:   tx.Bucket(blobID),
+		blobHash: tx.Bucket(blobHash),
 	}, nil
 }
 
 type Read struct {
-	tx   *bbolt.Tx
-	keys *bbolt.Bucket
-	ids  *bbolt.Bucket
-	fst  *bbolt.Bucket
-	blob *bbolt.Bucket
+	tx       *bbolt.Tx
+	keys     *bbolt.Bucket
+	ids      *bbolt.Bucket
+	fst      *bbolt.Bucket
+	blobID   *bbolt.Bucket
+	blobHash *bbolt.Bucket
 }
 
 func (r *Read) Release() error {
@@ -303,13 +303,29 @@ func (r *Read) Find(field string, key []byte) (uint64, bool) {
 
 // Blob returns data stored for blob id.
 func (r *Read) Blob(field string, id uint64) []byte {
-	ids := r.blob.Bucket([]byte(field))
+	ids := r.blobID.Bucket([]byte(field))
 	if ids == nil {
 		return nil
 	}
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], id)
 	return get(ids.Get(b[:]))
+}
+
+func (r *Read) FindBlob(field string, blob []byte) (uint64, bool) {
+	if len(blob) == 0 {
+		blob = emptyKey
+	}
+	b := r.blobHash.Bucket([]byte(field))
+	if b == nil {
+		return 0, false
+	}
+	hash := sha512.Sum512_224(blob)
+	value := b.Get(hash[:])
+	if value != nil {
+		return binary.BigEndian.Uint64(value), true
+	}
+	return 0, false
 }
 
 func (r *Read) SearchRe(field string, like string, start, end []byte, match func(key []byte, value uint64) error) error {

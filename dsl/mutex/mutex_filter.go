@@ -87,6 +87,18 @@ func neq(c *rbf.Cursor, field string, key []byte, tx *tx.Tx, columns *rows.Row) 
 	return exists.Difference(r), nil
 }
 
+func neqBlob(c *rbf.Cursor, field string, key []byte, tx *tx.Tx, columns *rows.Row) (r *rows.Row, err error) {
+	exists, err := existence(tx)
+	if err != nil {
+		return nil, err
+	}
+	r, err = eqBlob(c, field, key, tx, columns)
+	if err != nil {
+		return nil, err
+	}
+	return exists.Difference(r), nil
+}
+
 func existence(txn *tx.Tx) (r *rows.Row, err error) {
 	err = txn.Cursor("_id", func(c *rbf.Cursor, tx *tx.Tx) error {
 		r, err = cursor.Row(c, tx.Shard, 0)
@@ -97,6 +109,14 @@ func existence(txn *tx.Tx) (r *rows.Row, err error) {
 
 func eq(c *rbf.Cursor, field string, key []byte, tx *tx.Tx, columns *rows.Row) (r *rows.Row, err error) {
 	id, ok := tx.Tr.Find(field, key)
+	if !ok {
+		return rows.NewRow(), nil
+	}
+	return eqID(c, tx, id, columns)
+}
+
+func eqBlob(c *rbf.Cursor, field string, key []byte, tx *tx.Tx, columns *rows.Row) (r *rows.Row, err error) {
+	id, ok := tx.Tr.FindBlob(field, key)
 	if !ok {
 		return rows.NewRow(), nil
 	}
@@ -160,9 +180,9 @@ func (b *Blob) Apply(txn *tx.Tx, columns *rows.Row) (r *rows.Row, err error) {
 	err = txn.Cursor(b.Field, func(c *rbf.Cursor, tx *tx.Tx) error {
 		switch b.Op {
 		case EQ:
-			r, err = eq(c, b.Field, b.Value, txn, columns)
+			r, err = eqBlob(c, b.Field, b.Value, txn, columns)
 		case NEQ:
-			r, err = neq(c, b.Field, b.Value, txn, columns)
+			r, err = neqBlob(c, b.Field, b.Value, txn, columns)
 		default:
 			r = rows.NewRow()
 		}
