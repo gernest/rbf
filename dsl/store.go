@@ -16,6 +16,11 @@ type Store[T proto.Message] struct {
 
 type Option[T proto.Message] func(store *Store[T])
 
+func WithTimestampField[T proto.Message](name string) Option[T] {
+	return func(store *Store[T]) {
+		store.timestampField = protoreflect.Name(name)
+	}
+}
 func New[T proto.Message](path string, opts ...Option[T]) (*Store[T], error) {
 	o, err := newOps(path)
 	if err != nil {
