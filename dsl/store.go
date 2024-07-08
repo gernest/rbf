@@ -5,14 +5,18 @@ import (
 
 	"github.com/gernest/rbf/dsl/db"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 type Store[T proto.Message] struct {
-	db  *db.Shards
-	ops *Ops
+	db             *db.Shards
+	ops            *Ops
+	timestampField protoreflect.Name
 }
 
-func New[T proto.Message](path string) (*Store[T], error) {
+type Option[T proto.Message] func(store *Store[T])
+
+func New[T proto.Message](path string, opts ...Option[T]) (*Store[T], error) {
 	o, err := newOps(path)
 	if err != nil {
 		return nil, err
@@ -23,7 +27,11 @@ func New[T proto.Message](path string) (*Store[T], error) {
 		return nil, err
 	}
 
-	return &Store[T]{db: db, ops: o}, nil
+	s := &Store[T]{db: db, ops: o, timestampField: TimestampField}
+	for i := range opts {
+		opts[i](s)
+	}
+	return s, nil
 }
 
 func (s *Store[T]) Close() error {

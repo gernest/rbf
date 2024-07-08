@@ -67,13 +67,14 @@ type Writers map[string]writeFn
 
 // Schema maps proto fields to rbf types.
 type Schema[T proto.Message] struct {
-	store         *Store[T]
-	ops           *writeOps
-	shards        Shards
-	fields        protoreflect.FieldDescriptors
-	timeStringBuf []byte
-	timeViews     [][]byte
-	hasTime       bool
+	store          *Store[T]
+	ops            *writeOps
+	shards         Shards
+	fields         protoreflect.FieldDescriptors
+	timeStringBuf  []byte
+	timeViews      [][]byte
+	hasTime        bool
+	timeFieldIndex int
 }
 
 func (s *Store[T]) Schema() (*Schema[T], error) {
@@ -88,8 +89,9 @@ func (s *Store[T]) Schema() (*Schema[T], error) {
 		ops:    w,
 		fields: a.ProtoReflect().Descriptor().Fields(),
 	}
-	if a.ProtoReflect().Descriptor().Fields().ByName(TimestampField) != nil {
+	if f := a.ProtoReflect().Descriptor().Fields().ByName(s.timestampField); f != nil {
 		st.hasTime = true
+		st.timeFieldIndex = f.Index()
 		// We're supporting time quantums, so we need to store bits in a
 		// number of views for every entry with a timestamp. We want to compute
 		// time quantum view names for whatever combination of YMDH views
@@ -177,7 +179,7 @@ func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 	// field types.
 
 	if s.hasTime {
-		tsField := msg.Descriptor().Fields().ByName(TimestampField)
+		tsField := msg.Descriptor().Fields().Get(s.timeFieldIndex)
 		// We support historical data. To avoid touching shards that don't have
 		// relevant data we create quantum views that only apply to string or string
 		// set columns.
