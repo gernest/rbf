@@ -324,9 +324,9 @@ func Bytes(r *roaring.Bitmap, tr *tr.Write, field protoreflect.FieldDescriptor, 
 	if field.IsList() {
 		ls := value.List()
 		for i := 0; i < ls.Len(); i++ {
-			mutex.Add(r, id, tr.Blob(string(name), ls.Get(i).Bytes()))
+			bsi.Add(r, id, int64(tr.Blob(string(name), ls.Get(i).Bytes())))
 		}
 	} else {
-		mutex.Add(r, id, tr.Blob(string(name), value.Bytes()))
+		bsi.Add(r, id, int64(tr.Blob(string(name), value.Bytes())))
 	}
 }
