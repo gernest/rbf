@@ -30,10 +30,15 @@ var emptyKey = []byte{
 type File struct {
 	db   *bbolt.DB
 	path string
+	skip map[string]struct{}
 }
 
-func New(path string) *File {
-	return &File{path: path}
+func New(path string, skip ...string) *File {
+	m := map[string]struct{}{}
+	for _, n := range skip {
+		m[n] = struct{}{}
+	}
+	return &File{path: path, skip: m}
 }
 
 func (f *File) Open() error {
@@ -90,6 +95,7 @@ func (f *File) Write() (*Write, error) {
 		blobHash: tx.Bucket(blobHash),
 		fst:      tx.Bucket(fst),
 		touched:  make(map[string]struct{}),
+		skip:     f.skip,
 	}, nil
 }
 
@@ -104,6 +110,9 @@ type Write struct {
 	// tracks updated fields. Helps to avoid building fst for fields that were
 	// never updated.
 	touched map[string]struct{}
+
+	// String fields that are never indexed with vellum
+	skip map[string]struct{}
 }
 
 func (w *Write) Release() error {
@@ -127,6 +136,9 @@ func (w *Write) vellum() error {
 	return w.keys.ForEachBucket(func(k []byte) error {
 		if _, ok := w.touched[string(k)]; !ok {
 			// Avoid rebuilding fst for fields that were never updated.
+			return nil
+		}
+		if _, ok := w.skip[string(k)]; !ok {
 			return nil
 		}
 		o.Reset()

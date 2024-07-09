@@ -75,6 +75,7 @@ type Schema[T proto.Message] struct {
 	timeViews      [][]byte
 	hasTime        bool
 	timeFieldIndex int
+	skip           []string
 }
 
 func (s *Store[T]) Schema() (*Schema[T], error) {
@@ -88,6 +89,7 @@ func (s *Store[T]) Schema() (*Schema[T], error) {
 		shards: make(Shards),
 		ops:    w,
 		fields: a.ProtoReflect().Descriptor().Fields(),
+		skip:   s.skip,
 	}
 	if f := a.ProtoReflect().Descriptor().Fields().ByName(s.timestampField); f != nil {
 		st.hasTime = true
@@ -218,8 +220,7 @@ func (s *Schema[T]) validate(msg proto.Message) error {
 		if f.IsList() {
 			// only []string  and [][]byte is supported
 			switch f.Kind() {
-			case protoreflect.StringKind,
-				protoreflect.BytesKind:
+			case protoreflect.StringKind:
 			default:
 				return fmt.Errorf("%s list is not supported", f.Kind())
 			}
@@ -321,12 +322,5 @@ func String(r *roaring.Bitmap, tr *tr.Write, field protoreflect.FieldDescriptor,
 
 func Bytes(r *roaring.Bitmap, tr *tr.Write, field protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) {
 	name := field.Name()
-	if field.IsList() {
-		ls := value.List()
-		for i := 0; i < ls.Len(); i++ {
-			bsi.Add(r, id, int64(tr.Blob(string(name), ls.Get(i).Bytes())))
-		}
-	} else {
-		bsi.Add(r, id, int64(tr.Blob(string(name), value.Bytes())))
-	}
+	bsi.Add(r, id, int64(tr.Blob(string(name), value.Bytes())))
 }

@@ -12,6 +12,7 @@ type Store[T proto.Message] struct {
 	db             *db.Shards
 	ops            *Ops
 	timestampField protoreflect.Name
+	skip           []string
 }
 
 type Option[T proto.Message] func(store *Store[T])
@@ -21,6 +22,13 @@ func WithTimestampField[T proto.Message](name string) Option[T] {
 		store.timestampField = protoreflect.Name(name)
 	}
 }
+
+func WithSkip[T proto.Message](field ...string) Option[T] {
+	return func(store *Store[T]) {
+		store.skip = field
+	}
+}
+
 func New[T proto.Message](path string, opts ...Option[T]) (*Store[T], error) {
 	o, err := newOps(path)
 	if err != nil {
