@@ -1396,6 +1396,7 @@ func (tx *Tx) ApplyFilter(name string, key uint64, filter roaring.BitmapFilter) 
 	} else if err != nil {
 		return err
 	}
+	defer c.Close()
 	return c.ApplyFilter(key, filter)
 }
 
@@ -1483,9 +1484,6 @@ type containerFilter struct {
 }
 
 func (s *containerFilter) Close() {
-	// note that the cursor gets put back in the pool, but that cursor.Close
-	// zeroes out the cursor's tx for us.
-	s.cursor.Close()
 	s.cursor = nil
 	s.tx = nil
 	s.filter = nil
