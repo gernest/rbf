@@ -17,8 +17,10 @@ func TestTr(t *testing.T) {
 	require.NoError(t, err)
 	field := "string"
 	got := make([]uint64, 5)
+	tr, err := w.String(field)
+	require.NoError(t, err)
 	for n := range got {
-		got[n] = w.Tr(field, []byte(strconv.Itoa(n)))
+		got[n], _ = tr.Tr([]byte(strconv.Itoa(n)))
 	}
 	require.NoError(t, w.Commit())
 	require.Equal(t, []uint64{1, 2, 3, 4, 5}, got)
@@ -26,10 +28,11 @@ func TestTr(t *testing.T) {
 	t.Run("Dupe", func(t *testing.T) {
 		w, err := f.Write()
 		require.NoError(t, err)
-		field := "test"
 		got2 := make([]uint64, 5)
+		tr, err := w.String(field)
+		require.NoError(t, err)
 		for n := range got2 {
-			got2[n] = w.Tr(field, []byte(strconv.Itoa(n)))
+			got2[n], _ = tr.Tr([]byte(strconv.Itoa(n)))
 		}
 		require.NoError(t, w.Commit())
 		require.Equal(t, got, got2)
@@ -83,7 +86,10 @@ func TestTr_empty(t *testing.T) {
 	require.NoError(t, err)
 	defer w.Commit()
 	field := "string"
-	id, err := w.tr(field, []byte(""))
+	tr, err := w.String(field)
+	require.NoError(t, err)
+
+	id, err := tr.Tr([]byte(""))
 	require.NoError(t, err)
 
 	require.Equal(t, uint64(1), id)
@@ -103,9 +109,11 @@ func TestBlob(t *testing.T) {
 	w, err := f.Write()
 	require.NoError(t, err)
 	field := "string"
+	tr, err := w.Blobs(field)
+	require.NoError(t, err)
 	got := make([]uint64, 5)
 	for n := range got {
-		got[n] = w.Blob(field, []byte(strconv.Itoa(n)))
+		got[n], _ = tr.Tr([]byte(strconv.Itoa(n)))
 	}
 	require.NoError(t, w.Commit())
 	require.Equal(t, []uint64{1, 2, 3, 4, 5}, got)
@@ -113,10 +121,11 @@ func TestBlob(t *testing.T) {
 	t.Run("Dupe", func(t *testing.T) {
 		w, err := f.Write()
 		require.NoError(t, err)
-		field := "test"
 		got2 := make([]uint64, 5)
+		tr, err := w.Blobs(field)
+		require.NoError(t, err)
 		for n := range got2 {
-			got2[n] = w.Blob(field, []byte(strconv.Itoa(n)))
+			got2[n], _ = tr.Tr([]byte(strconv.Itoa(n)))
 		}
 		require.NoError(t, w.Commit())
 		require.Equal(t, got, got2)

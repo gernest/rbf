@@ -164,22 +164,6 @@ func (w *Write) vellum() error {
 	})
 }
 
-func (w *Write) Blob(field string, data []byte) uint64 {
-	next, err := w.blob(field, data)
-	if err != nil {
-		panic(err)
-	}
-	return next
-}
-
-func (w *Write) Tr(field string, key []byte) uint64 {
-	next, err := w.tr(field, key)
-	if err != nil {
-		panic(err)
-	}
-	return next
-}
-
 func (w *Write) String(field string) (*String, error) {
 	keys, err := bucket(w.keys, []byte(field))
 	if err != nil {
@@ -223,6 +207,9 @@ type String struct {
 }
 
 func (c *String) Tr(key []byte) (uint64, error) {
+	if len(key) == 0 {
+		key = emptyKey
+	}
 	c.touch()
 	// fast path: hey already translated.
 	if value := c.keys.Get(key); value != nil {
@@ -257,6 +244,9 @@ type Blob struct {
 }
 
 func (c *Blob) Tr(key []byte) (uint64, error) {
+	if len(key) == 0 {
+		key = emptyKey
+	}
 	hash := sha512.Sum512_224(key)
 
 	// fast path: hey already translated.
@@ -277,79 +267,6 @@ func (c *Blob) Tr(key []byte) (uint64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("ebf/tr: writing blob id %w", err)
 	}
-	return next, nil
-}
-
-func (w *Write) tr(field string, key []byte) (uint64, error) {
-	if len(key) == 0 {
-		key = emptyKey
-	}
-	keys, err := bucket(w.keys, []byte(field))
-	if err != nil {
-		return 0, fmt.Errorf("ebf/tr: setup keys bucket %w", err)
-	}
-	// fast path: hey already translated.
-	if value := keys.Get(key); value != nil {
-		return binary.BigEndian.Uint64(value), nil
-	}
-	ids, err := bucket(w.ids, []byte(field))
-	if err != nil {
-		return 0, fmt.Errorf("ebf/tr: setup ids bucket %w", err)
-	}
-	next, err := ids.NextSequence()
-	if err != nil {
-		return 0, fmt.Errorf("ebf/tr: getting seq id %w", err)
-	}
-	var b [8]byte
-	binary.BigEndian.PutUint64(b[:], next)
-
-	err = keys.Put(key, b[:])
-	if err != nil {
-		return 0, fmt.Errorf("ebf/tr: writing key %w", err)
-	}
-	err = ids.Put(b[:], key)
-	if err != nil {
-		return 0, fmt.Errorf("ebf/tr: writing key %w", err)
-	}
-	w.touched[field] = struct{}{}
-	return next, nil
-}
-
-func (w *Write) blob(field string, key []byte) (uint64, error) {
-	if len(key) == 0 {
-		key = emptyKey
-	}
-	keys, err := bucket(w.blobHash, []byte(field))
-	if err != nil {
-		return 0, fmt.Errorf("ebf/tr: setup blob keys bucket %w", err)
-	}
-
-	hash := sha512.Sum512_224(key)
-
-	// fast path: hey already translated.
-	if value := keys.Get(hash[:]); value != nil {
-		return binary.BigEndian.Uint64(value), nil
-	}
-	ids, err := bucket(w.blobID, []byte(field))
-	if err != nil {
-		return 0, fmt.Errorf("ebf/tr: setup blob ids bucket %w", err)
-	}
-	next, err := ids.NextSequence()
-	if err != nil {
-		return 0, fmt.Errorf("ebf/tr: getting seq id %w", err)
-	}
-	var b [8]byte
-	binary.BigEndian.PutUint64(b[:], next)
-
-	err = keys.Put(hash[:], b[:])
-	if err != nil {
-		return 0, fmt.Errorf("ebf/tr: writing blob key %w", err)
-	}
-	err = ids.Put(b[:], key)
-	if err != nil {
-		return 0, fmt.Errorf("ebf/tr: writing blob id %w", err)
-	}
-	w.touched[field] = struct{}{}
 	return next, nil
 }
 
