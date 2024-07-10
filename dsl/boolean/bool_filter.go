@@ -20,7 +20,7 @@ func Filter(field string, value bool) *Match {
 var _ query.Filter = (*Match)(nil)
 
 func (m *Match) Apply(tx *tx.Tx, columns *rows.Row) (*rows.Row, error) {
-	c, err := tx.Tx.Cursor(m.field)
+	c, err := tx.Tx.Cursor(tx.Key(m.field))
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +41,7 @@ func (m *Match) Apply(tx *tx.Tx, columns *rows.Row) (*rows.Row, error) {
 }
 
 func Count(txn *tx.Tx, field string, isTrue bool, columns *rows.Row) (count int64, err error) {
-	err = txn.Cursor(field, func(c *rbf.Cursor, tx *tx.Tx) error {
+	err = txn.Cursor(txn.Key(field), func(c *rbf.Cursor, tx *tx.Tx) error {
 		var r *rows.Row
 		var err error
 		if isTrue {

@@ -26,7 +26,7 @@ func Filter(field string, value uint64) *Match {
 var _ query.Filter = (*Match)(nil)
 
 func (m *Match) Apply(tx *tx.Tx, columns *rows.Row) (*rows.Row, error) {
-	c, err := tx.Tx.Cursor(m.field)
+	c, err := tx.Tx.Cursor(tx.Key(m.field))
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ type MatchString struct {
 }
 
 func (m *MatchString) Apply(txn *tx.Tx, columns *rows.Row) (r *rows.Row, err error) {
-	err = txn.Cursor(m.Field, func(c *rbf.Cursor, tx *tx.Tx) error {
+	err = txn.Cursor(txn.Key(m.Field), func(c *rbf.Cursor, tx *tx.Tx) error {
 		switch m.Op {
 		case EQ:
 			r, err = eq(c, m.Field, []byte(m.Value), tx, columns)
@@ -100,7 +100,7 @@ func neqBlob(c *rbf.Cursor, field string, key []byte, tx *tx.Tx, columns *rows.R
 }
 
 func existence(txn *tx.Tx) (r *rows.Row, err error) {
-	err = txn.Cursor("_id", func(c *rbf.Cursor, tx *tx.Tx) error {
+	err = txn.Cursor(txn.Key("_id"), func(c *rbf.Cursor, tx *tx.Tx) error {
 		r, err = cursor.Row(c, tx.Shard, 0)
 		return err
 	})
@@ -116,7 +116,7 @@ func eq(c *rbf.Cursor, field string, key []byte, tx *tx.Tx, columns *rows.Row) (
 }
 
 func eqBlob(c *rbf.Cursor, field string, key []byte, tx *tx.Tx, columns *rows.Row) (r *rows.Row, err error) {
-	id, ok := tx.Tr.FindBlob(field, key)
+	id, ok := tx.Tr.Find(field, key)
 	if !ok {
 		return rows.NewRow(), nil
 	}
@@ -177,7 +177,7 @@ type Blob struct {
 var _ query.Filter = (*Blob)(nil)
 
 func (b *Blob) Apply(txn *tx.Tx, columns *rows.Row) (r *rows.Row, err error) {
-	err = txn.Cursor(b.Field, func(c *rbf.Cursor, tx *tx.Tx) error {
+	err = txn.Cursor(txn.Key(b.Field), func(c *rbf.Cursor, tx *tx.Tx) error {
 		switch b.Op {
 		case EQ:
 			r, err = eqBlob(c, b.Field, b.Value, txn, columns)
