@@ -291,6 +291,18 @@ func (r *Read) Key(field string, id uint64) []byte {
 	return get(ids.Get(b[:]))
 }
 
+func (r *Read) Keys(field string, id []uint64, f func(value []byte)) {
+	ids := r.ids.Bucket([]byte(field))
+	if ids == nil {
+		return
+	}
+	var b [8]byte
+	for i := range id {
+		binary.BigEndian.PutUint64(b[:], id[i])
+		f(get(ids.Get(b[:])))
+	}
+}
+
 func get(key []byte) []byte {
 	if bytes.Equal(key, emptyKey) {
 		return []byte{}
