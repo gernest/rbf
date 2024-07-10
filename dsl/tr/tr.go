@@ -138,7 +138,7 @@ func (w *Write) vellum() error {
 			// Avoid rebuilding fst for fields that were never updated.
 			return nil
 		}
-		if _, ok := w.skip[string(k)]; !ok {
+		if _, ok := w.skip[string(k)]; ok {
 			return nil
 		}
 		o.Reset()
@@ -178,6 +178,106 @@ func (w *Write) Tr(field string, key []byte) uint64 {
 		panic(err)
 	}
 	return next
+}
+
+func (w *Write) String(field string) (*String, error) {
+	keys, err := bucket(w.keys, []byte(field))
+	if err != nil {
+		return nil, fmt.Errorf("ebf/tr: setup keys bucket %w", err)
+	}
+	ids, err := bucket(w.ids, []byte(field))
+	if err != nil {
+		return nil, fmt.Errorf("ebf/tr: setup ids bucket %w", err)
+	}
+	return &String{keys: keys, ids: ids, touch: w.touch(field)}, nil
+}
+
+func (w *Write) Blobs(field string) (*Blob, error) {
+	keys, err := bucket(w.blobHash, []byte(field))
+	if err != nil {
+		return nil, fmt.Errorf("ebf/tr: setup keys bucket %w", err)
+	}
+	ids, err := bucket(w.blobID, []byte(field))
+	if err != nil {
+		return nil, fmt.Errorf("ebf/tr: setup ids bucket %w", err)
+	}
+	return &Blob{keys: keys, ids: ids}, nil
+}
+
+func (w *Write) touch(name string) func() {
+	done := false
+	return func() {
+		if done {
+			return
+		}
+		w.touched[name] = struct{}{}
+		done = true
+	}
+}
+
+type String struct {
+	keys  *bbolt.Bucket
+	ids   *bbolt.Bucket
+	b     [8]byte
+	touch func()
+}
+
+func (c *String) Tr(key []byte) (uint64, error) {
+	c.touch()
+	// fast path: hey already translated.
+	if value := c.keys.Get(key); value != nil {
+		return binary.BigEndian.Uint64(value), nil
+	}
+	next, err := c.ids.NextSequence()
+	if err != nil {
+		return 0, fmt.Errorf("ebf/tr: getting seq id %w", err)
+	}
+
+	binary.BigEndian.PutUint64(c.b[:], next)
+
+	err = c.keys.Put(key, bytes.Clone(c.b[:]))
+	if err != nil {
+		return 0, fmt.Errorf("ebf/tr: writing key %w", err)
+	}
+	err = c.ids.Put(c.b[:], key)
+	if err != nil {
+		return 0, fmt.Errorf("ebf/tr: writing key %w", err)
+	}
+	return next, nil
+}
+
+type Translate interface {
+	Tr(key []byte) (uint64, error)
+}
+
+type Blob struct {
+	keys *bbolt.Bucket
+	ids  *bbolt.Bucket
+	b    [8]byte
+}
+
+func (c *Blob) Tr(key []byte) (uint64, error) {
+	hash := sha512.Sum512_224(key)
+
+	// fast path: hey already translated.
+	if value := c.keys.Get(hash[:]); value != nil {
+		return binary.BigEndian.Uint64(value), nil
+	}
+	next, err := c.ids.NextSequence()
+	if err != nil {
+		return 0, fmt.Errorf("ebf/tr: getting seq id %w", err)
+	}
+	binary.BigEndian.PutUint64(c.b[:], next)
+
+	err = c.keys.Put(hash[:], bytes.Clone(c.b[:]))
+	if err != nil {
+		return 0, fmt.Errorf("ebf/tr: writing blob key %w", err)
+	}
+	err = c.ids.Put(c.b[:], key)
+	if err != nil {
+		return 0, fmt.Errorf("ebf/tr: writing blob id %w", err)
+	}
+	return next, nil
 }
 
 func (w *Write) tr(field string, key []byte) (uint64, error) {

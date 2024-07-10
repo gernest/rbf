@@ -13,6 +13,7 @@ import (
 	"github.com/gernest/rbf/quantum"
 	"github.com/gernest/roaring"
 	"github.com/gernest/roaring/shardwidth"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -76,6 +77,8 @@ type Schema[T proto.Message] struct {
 	hasTime        bool
 	timeFieldIndex int
 	skip           []string
+
+	cache map[protoreflect.FieldNumber]tr.Translate
 }
 
 func (s *Store[T]) Schema() (*Schema[T], error) {
@@ -90,6 +93,7 @@ func (s *Store[T]) Schema() (*Schema[T], error) {
 		ops:    w,
 		fields: a.ProtoReflect().Descriptor().Fields(),
 		skip:   s.skip,
+		cache:  make(map[protowire.Number]tr.Translate),
 	}
 	if f := a.ProtoReflect().Descriptor().Fields().ByName(s.timestampField); f != nil {
 		st.hasTime = true
@@ -141,15 +145,15 @@ func (s *Schema[T]) next() (uint64, error) {
 type timeFmt func(value protoreflect.Value) time.Time
 
 var timeQuantum = map[protoreflect.Kind]timeFmt{
-	protoreflect.Int64Kind:  Millisecond,
-	protoreflect.Uint64Kind: Nanosecond,
+	protoreflect.Int64Kind:  ms,
+	protoreflect.Uint64Kind: ns,
 }
 
-func Millisecond(value protoreflect.Value) time.Time {
+func ms(value protoreflect.Value) time.Time {
 	return time.UnixMilli(value.Int())
 }
 
-func Nanosecond(value protoreflect.Value) time.Time {
+func ns(value protoreflect.Value) time.Time {
 	return time.Unix(0, int64(value.Uint()))
 }
 
@@ -200,10 +204,17 @@ func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 	msg.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 		name := string(fd.Name())
 		kind := fd.Kind()
-		writers[kind](vs.get(StandardView).get(name), s.ops.tr, fd, id, v)
+		tr := s.cache[fd.Number()]
+		err = writers[kind](vs.get(StandardView).get(name), tr, fd, id, v)
+		if err != nil {
+			return false
+		}
 		if s.hasTime {
 			for i := range s.timeViews {
-				writers[kind](vs.get(string(s.timeViews[i])).get(name), s.ops.tr, fd, id, v)
+				err = writers[kind](vs.get(string(s.timeViews[i])).get(name), tr, fd, id, v)
+				if err != nil {
+					return false
+				}
 			}
 		}
 		return true
@@ -211,7 +222,7 @@ func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
 	return
 }
 
-type writeFn func(r *roaring.Bitmap, tr *tr.Write, field protoreflect.FieldDescriptor, id uint64, value protoreflect.Value)
+type writeFn func(r *roaring.Bitmap, tr tr.Translate, field protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) error
 
 func (s *Schema[T]) validate(msg proto.Message) error {
 	fields := msg.ProtoReflect().Descriptor().Fields()
@@ -221,6 +232,10 @@ func (s *Schema[T]) validate(msg proto.Message) error {
 			// only []string  and [][]byte is supported
 			switch f.Kind() {
 			case protoreflect.StringKind:
+				err := s.cacheStringFieldTr(f)
+				if err != nil {
+					return err
+				}
 			default:
 				return fmt.Errorf("%s list is not supported", f.Kind())
 			}
@@ -231,13 +246,42 @@ func (s *Schema[T]) validate(msg proto.Message) error {
 			protoreflect.EnumKind,
 			protoreflect.Int64Kind,
 			protoreflect.Uint64Kind,
-			protoreflect.DoubleKind,
-			protoreflect.StringKind,
-			protoreflect.BytesKind:
+			protoreflect.DoubleKind:
+
+		case protoreflect.StringKind:
+			err := s.cacheStringFieldTr(f)
+			if err != nil {
+				return err
+			}
+		case protoreflect.BytesKind:
+			err := s.cacheBlobFieldTr(f)
+			if err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("%s is not supported", f.Kind())
 		}
 	}
+	return nil
+}
+
+func (s *Schema[T]) cacheStringFieldTr(f protoreflect.FieldDescriptor) error {
+	name := f.Name()
+	cache, err := s.ops.tr.String(string(name))
+	if err != nil {
+		return err
+	}
+	s.cache[f.Number()] = cache
+	return nil
+}
+
+func (s *Schema[T]) cacheBlobFieldTr(f protoreflect.FieldDescriptor) error {
+	name := f.Name()
+	cache, err := s.ops.tr.Blobs(string(name))
+	if err != nil {
+		return err
+	}
+	s.cache[f.Number()] = cache
 	return nil
 }
 
@@ -286,41 +330,58 @@ var (
 )
 
 // Bool writes a boolean proto value
-func Bool(r *roaring.Bitmap, _ *tr.Write, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) {
+func Bool(r *roaring.Bitmap, _ tr.Translate, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) error {
 	boolean.Add(r, id, value.Bool())
+	return nil
 }
 
 // Enum writes enum proto value
-func Enum(r *roaring.Bitmap, _ *tr.Write, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) {
+func Enum(r *roaring.Bitmap, _ tr.Translate, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) error {
 	mutex.Add(r, id, uint64(value.Enum()))
+	return nil
 }
 
 // Int64 writes int64 proto value
-func Int64(r *roaring.Bitmap, _ *tr.Write, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) {
+func Int64(r *roaring.Bitmap, _ tr.Translate, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) error {
 	bsi.Add(r, id, value.Int())
+	return nil
 }
 
-func Uint64(r *roaring.Bitmap, _ *tr.Write, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) {
+func Uint64(r *roaring.Bitmap, _ tr.Translate, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) error {
 	bsi.Add(r, id, int64(value.Uint()))
+	return nil
 }
 
-func Float64(r *roaring.Bitmap, _ *tr.Write, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) {
+func Float64(r *roaring.Bitmap, _ tr.Translate, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) error {
 	bsi.Add(r, id, int64(math.Float64bits(value.Float())))
+	return nil
 }
 
-func String(r *roaring.Bitmap, tr *tr.Write, field protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) {
-	name := field.Name()
+func String(r *roaring.Bitmap, tr tr.Translate, field protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) error {
 	if field.IsList() {
 		ls := value.List()
 		for i := 0; i < ls.Len(); i++ {
-			mutex.Add(r, id, tr.Tr(string(name), []byte(ls.Get(i).String())))
+			bit, err := tr.Tr([]byte(ls.Get(i).String()))
+			if err != nil {
+				return err
+			}
+			mutex.Add(r, id, bit)
 		}
 	} else {
-		mutex.Add(r, id, tr.Tr(string(name), []byte(value.String())))
+		bit, err := tr.Tr([]byte(value.String()))
+		if err != nil {
+			return err
+		}
+		mutex.Add(r, id, bit)
 	}
+	return nil
 }
 
-func Bytes(r *roaring.Bitmap, tr *tr.Write, field protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) {
-	name := field.Name()
-	bsi.Add(r, id, int64(tr.Blob(string(name), value.Bytes())))
+func Bytes(r *roaring.Bitmap, tr tr.Translate, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) error {
+	bit, err := tr.Tr(value.Bytes())
+	if err != nil {
+		return err
+	}
+	bsi.Add(r, id, int64(bit))
+	return nil
 }

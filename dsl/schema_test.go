@@ -150,6 +150,7 @@ func (s *StringTest) TestVellum() {
 	for i := range s.source {
 		schema.Write(s.source[i])
 	}
+
 	s.Require().NoError(schema.Save())
 
 	r, err := s.db.Reader()
