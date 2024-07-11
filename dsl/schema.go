@@ -17,28 +17,6 @@ const (
 	ID = "_id"
 )
 
-type Fields map[string]*roaring.Bitmap
-
-func (f Fields) get(id string) *roaring.Bitmap {
-	a, ok := f[id]
-	if !ok {
-		a = roaring.NewBitmap()
-		f[id] = a
-	}
-	return a
-}
-
-type Shards map[uint64]Fields
-
-func (s Shards) get(id uint64) Fields {
-	a, ok := s[id]
-	if !ok {
-		a = make(Fields)
-		s[id] = a
-	}
-	return a
-}
-
 // Schema maps proto fields to rbf types.
 type Schema[T proto.Message] struct {
 	ids    []uint64
