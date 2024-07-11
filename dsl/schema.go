@@ -274,7 +274,7 @@ func (s *Schema[T]) Process(db *Store[T]) error {
 		shardwidth.FindNextShard(0, s.ids); start < len(s.ids) && end <= len(s.ids); start, end = end,
 		shardwidth.FindNextShard(end, s.ids) {
 		shard := s.ids[start] / shardwidth.ShardWidth
-		err := db.db.Update(shard, func(tx *rbf.Tx) error {
+		err := db.db.Update(shard, func(tx *rbf.Tx, _ uint64) error {
 			for i := 0; i < fields.Len(); i++ {
 				f := fields.Get(i)
 				name := string(f.Name())

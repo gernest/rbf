@@ -30,8 +30,8 @@ func (r *Reader[T]) Tr() *tr.Read {
 	return r.ops.tr
 }
 
-func (r *Reader[T]) View(shard uint64, f func(txn *tx.Tx) error) error {
-	return r.store.db.View(shard, func(txn *rbf.Tx) error {
+func (r *Reader[T]) View(f func(txn *tx.Tx) error) error {
+	return r.store.db.View(func(txn *rbf.Tx, shard uint64) error {
 		rx, err := r.store.ops.read()
 		if err != nil {
 			return err

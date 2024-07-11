@@ -3,9 +3,12 @@ package db
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 
+	"github.com/RoaringBitmap/roaring/roaring64"
 	"github.com/dgraph-io/ristretto"
 	"github.com/gernest/rbf"
 	"github.com/gernest/rbf/cfg"
@@ -14,8 +17,10 @@ import (
 type Shards struct {
 	cache *ristretto.Cache
 	log   *slog.Logger
-	path  string
-	mu    sync.Mutex
+
+	shards roaring64.Bitmap
+	path   string
+	mu     sync.RWMutex
 }
 
 func New(path string) (*Shards, error) {
@@ -48,11 +53,24 @@ func New(path string) (*Shards, error) {
 	if err != nil {
 		return nil, fmt.Errorf("creating database cache %w", err)
 	}
-	return &Shards{
+
+	dbPath := filepath.Join(path, "rbf")
+
+	s := &Shards{
 		cache: cache,
 		log:   log,
-		path:  filepath.Join(path, "rbf"),
-	}, nil
+		path:  dbPath,
+	}
+	if dir, err := os.ReadDir(dbPath); err == nil {
+		for _, e := range dir {
+			shard, err := strconv.ParseUint(e.Name(), 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("parsing shard %q %w", e.Name(), err)
+			}
+			s.shards.Add(shard)
+		}
+	}
+	return s, nil
 }
 
 func (s *Shards) Close() (err error) {
@@ -60,15 +78,26 @@ func (s *Shards) Close() (err error) {
 	return
 }
 
-func (s *Shards) View(shard uint64, f func(tx *rbf.Tx) error) error {
-	return s.tx(shard, false, f)
+func (s *Shards) View(f func(tx *rbf.Tx, shard uint64) error) error {
+	s.mu.RLock()
+	all := s.shards.Clone()
+	s.mu.RUnlock()
+	it := all.Iterator()
+	for it.HasNext() {
+		shard := it.Next()
+		err := s.tx(shard, false, f)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func (s *Shards) Update(shard uint64, f func(tx *rbf.Tx) error) error {
+func (s *Shards) Update(shard uint64, f func(tx *rbf.Tx, shard uint64) error) error {
 	return s.tx(shard, true, f)
 }
 
-func (s *Shards) tx(shard uint64, update bool, f func(tx *rbf.Tx) error) error {
+func (s *Shards) tx(shard uint64, update bool, f func(tx *rbf.Tx, shard uint64) error) error {
 	db, err := s.get(shard)
 	if err != nil {
 		return err
@@ -79,9 +108,9 @@ func (s *Shards) tx(shard uint64, update bool, f func(tx *rbf.Tx) error) error {
 	}
 	if !update {
 		defer tx.Rollback()
-		return f(tx)
+		return f(tx, shard)
 	}
-	err = f(tx)
+	err = f(tx, shard)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -114,6 +143,7 @@ func (s *Shards) get(shard uint64) (*rbf.DB, error) {
 			break
 		}
 	}
+	s.shards.Add(shard)
 	return db, nil
 }
 

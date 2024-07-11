@@ -31,7 +31,7 @@ func TestStore(t *testing.T) {
 	require.NoError(t, db.Flush())
 	want := []string{"blob", "blob_set", "bool", "double", "enum", "int64", "set", "string", "uint64"}
 	var got []string
-	db.db.View(0, func(tx *rbf.Tx) error {
+	db.db.View(func(tx *rbf.Tx, _ uint64) error {
 		got = tx.FieldViews()
 		return nil
 	})
