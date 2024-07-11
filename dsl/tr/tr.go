@@ -94,8 +94,6 @@ func (f *File) Write() (*Write, error) {
 		blobID:   tx.Bucket(blobID),
 		blobHash: tx.Bucket(blobHash),
 		fst:      tx.Bucket(fst),
-		touched:  make(map[string]struct{}),
-		skip:     f.skip,
 	}, nil
 }
 
@@ -106,13 +104,6 @@ type Write struct {
 	blobID   *bbolt.Bucket
 	blobHash *bbolt.Bucket
 	fst      *bbolt.Bucket
-
-	// tracks updated fields. Helps to avoid building fst for fields that were
-	// never updated.
-	touched map[string]struct{}
-
-	// String fields that are never indexed with vellum
-	skip map[string]struct{}
 }
 
 func (w *Write) Release() error {
@@ -134,13 +125,6 @@ func (w *Write) vellum() error {
 		return err
 	}
 	return w.keys.ForEachBucket(func(k []byte) error {
-		if _, ok := w.touched[string(k)]; !ok {
-			// Avoid rebuilding fst for fields that were never updated.
-			return nil
-		}
-		if _, ok := w.skip[string(k)]; ok {
-			return nil
-		}
 		o.Reset()
 		err := b.Reset(&o)
 		if err != nil {
@@ -173,7 +157,7 @@ func (w *Write) String(field string) (*String, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ebf/tr: setup ids bucket %w", err)
 	}
-	return &String{keys: keys, ids: ids, touch: w.touch(field)}, nil
+	return &String{keys: keys, ids: ids}, nil
 }
 
 func (w *Write) Blobs(field string) (*Blob, error) {
@@ -188,53 +172,74 @@ func (w *Write) Blobs(field string) (*Blob, error) {
 	return &Blob{keys: keys, ids: ids}, nil
 }
 
-func (w *Write) touch(name string) func() {
-	done := false
-	return func() {
-		if done {
-			return
-		}
-		w.touched[name] = struct{}{}
-		done = true
-	}
-}
-
 type String struct {
-	keys  *bbolt.Bucket
-	ids   *bbolt.Bucket
-	b     [8]byte
-	touch func()
+	keys *bbolt.Bucket
+	ids  *bbolt.Bucket
+	b    [8]byte
 }
 
-func (c *String) Tr(key []byte) (uint64, error) {
-	if len(key) == 0 {
-		key = emptyKey
-	}
-	c.touch()
-	// fast path: hey already translated.
-	if value := c.keys.Get(key); value != nil {
-		return binary.BigEndian.Uint64(value), nil
-	}
-	next, err := c.ids.NextSequence()
-	if err != nil {
-		return 0, fmt.Errorf("ebf/tr: getting seq id %w", err)
-	}
+func (c *String) Bulk(keys []string, result []uint64) error {
+	for i := range keys {
+		key := []byte(keys[i])
+		if len(key) == 0 {
+			key = emptyKey
+		}
+		// fast path: hey already translated.
+		if value := c.keys.Get(key); value != nil {
+			result[i] = binary.BigEndian.Uint64(value)
+			continue
+		}
+		next, err := c.ids.NextSequence()
+		if err != nil {
+			return fmt.Errorf("ebf/tr: getting seq id %w", err)
+		}
 
-	binary.BigEndian.PutUint64(c.b[:], next)
+		binary.BigEndian.PutUint64(c.b[:], next)
 
-	err = c.keys.Put(key, bytes.Clone(c.b[:]))
-	if err != nil {
-		return 0, fmt.Errorf("ebf/tr: writing key %w", err)
+		err = c.keys.Put(key, bytes.Clone(c.b[:]))
+		if err != nil {
+			return fmt.Errorf("ebf/tr: writing key %w", err)
+		}
+		err = c.ids.Put(c.b[:], key)
+		if err != nil {
+			return fmt.Errorf("ebf/tr: writing key %w", err)
+		}
+		result[i] = next
 	}
-	err = c.ids.Put(c.b[:], key)
-	if err != nil {
-		return 0, fmt.Errorf("ebf/tr: writing key %w", err)
-	}
-	return next, nil
+	return nil
 }
 
-type Translate interface {
-	Tr(key []byte) (uint64, error)
+func (c *String) BulkSet(keys [][]string, result [][]uint64) error {
+	for n := range keys {
+		for i := range keys[n] {
+			key := []byte(keys[n][i])
+			if len(key) == 0 {
+				key = emptyKey
+			}
+			// fast path: hey already translated.
+			if value := c.keys.Get(key); value != nil {
+				result[n][i] = binary.BigEndian.Uint64(value)
+				continue
+			}
+			next, err := c.ids.NextSequence()
+			if err != nil {
+				return fmt.Errorf("ebf/tr: getting seq id %w", err)
+			}
+
+			binary.BigEndian.PutUint64(c.b[:], next)
+
+			err = c.keys.Put(key, bytes.Clone(c.b[:]))
+			if err != nil {
+				return fmt.Errorf("ebf/tr: writing key %w", err)
+			}
+			err = c.ids.Put(c.b[:], key)
+			if err != nil {
+				return fmt.Errorf("ebf/tr: writing key %w", err)
+			}
+			result[n][i] = next
+		}
+	}
+	return nil
 }
 
 type Blob struct {
@@ -243,31 +248,64 @@ type Blob struct {
 	b    [8]byte
 }
 
-func (c *Blob) Tr(key []byte) (uint64, error) {
-	if len(key) == 0 {
-		key = emptyKey
+func (c *Blob) Bulk(keys [][]byte, result []uint64) error {
+	for i := range keys {
+		key := keys[i]
+		if len(key) == 0 {
+			key = emptyKey
+		}
+		hash := sha512.Sum512_224(key)
+		if value := c.keys.Get(hash[:]); value != nil {
+			result[i] = binary.BigEndian.Uint64(value)
+			continue
+		}
+		next, err := c.ids.NextSequence()
+		if err != nil {
+			return fmt.Errorf("ebf/tr: getting seq id %w", err)
+		}
+		binary.BigEndian.PutUint64(c.b[:], next)
+		err = c.keys.Put(hash[:], bytes.Clone(c.b[:]))
+		if err != nil {
+			return fmt.Errorf("ebf/tr: writing blob key %w", err)
+		}
+		err = c.ids.Put(c.b[:], key)
+		if err != nil {
+			return fmt.Errorf("ebf/tr: writing blob id %w", err)
+		}
+		result[i] = next
 	}
-	hash := sha512.Sum512_224(key)
+	return nil
+}
 
-	// fast path: hey already translated.
-	if value := c.keys.Get(hash[:]); value != nil {
-		return binary.BigEndian.Uint64(value), nil
+func (c *Blob) BulkSet(keys [][][]byte, result [][]uint64) error {
+	for n := range keys {
+		for i := range keys[n] {
+			key := keys[n][i]
+			if len(key) == 0 {
+				key = emptyKey
+			}
+			hash := sha512.Sum512_224(key)
+			if value := c.keys.Get(hash[:]); value != nil {
+				result[n][i] = binary.BigEndian.Uint64(value)
+				continue
+			}
+			next, err := c.ids.NextSequence()
+			if err != nil {
+				return fmt.Errorf("ebf/tr: getting seq id %w", err)
+			}
+			binary.BigEndian.PutUint64(c.b[:], next)
+			err = c.keys.Put(hash[:], bytes.Clone(c.b[:]))
+			if err != nil {
+				return fmt.Errorf("ebf/tr: writing blob key %w", err)
+			}
+			err = c.ids.Put(c.b[:], key)
+			if err != nil {
+				return fmt.Errorf("ebf/tr: writing blob id %w", err)
+			}
+			result[n][i] = next
+		}
 	}
-	next, err := c.ids.NextSequence()
-	if err != nil {
-		return 0, fmt.Errorf("ebf/tr: getting seq id %w", err)
-	}
-	binary.BigEndian.PutUint64(c.b[:], next)
-
-	err = c.keys.Put(hash[:], bytes.Clone(c.b[:]))
-	if err != nil {
-		return 0, fmt.Errorf("ebf/tr: writing blob key %w", err)
-	}
-	err = c.ids.Put(c.b[:], key)
-	if err != nil {
-		return 0, fmt.Errorf("ebf/tr: writing blob id %w", err)
-	}
-	return next, nil
+	return nil
 }
 
 func (f *File) Read() (*Read, error) {

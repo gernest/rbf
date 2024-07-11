@@ -20,65 +20,73 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type Mutex_Enum int32
+type Model_Enum int32
 
 const (
-	Mutex_none Mutex_Enum = 0
-	Mutex_zero Mutex_Enum = 1
-	Mutex_one  Mutex_Enum = 2
+	Model_none Model_Enum = 0
+	Model_zero Model_Enum = 1
+	Model_one  Model_Enum = 2
 )
 
-// Enum value maps for Mutex_Enum.
+// Enum value maps for Model_Enum.
 var (
-	Mutex_Enum_name = map[int32]string{
+	Model_Enum_name = map[int32]string{
 		0: "none",
 		1: "zero",
 		2: "one",
 	}
-	Mutex_Enum_value = map[string]int32{
+	Model_Enum_value = map[string]int32{
 		"none": 0,
 		"zero": 1,
 		"one":  2,
 	}
 )
 
-func (x Mutex_Enum) Enum() *Mutex_Enum {
-	p := new(Mutex_Enum)
+func (x Model_Enum) Enum() *Model_Enum {
+	p := new(Model_Enum)
 	*p = x
 	return p
 }
 
-func (x Mutex_Enum) String() string {
+func (x Model_Enum) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (Mutex_Enum) Descriptor() protoreflect.EnumDescriptor {
+func (Model_Enum) Descriptor() protoreflect.EnumDescriptor {
 	return file_msg_proto_enumTypes[0].Descriptor()
 }
 
-func (Mutex_Enum) Type() protoreflect.EnumType {
+func (Model_Enum) Type() protoreflect.EnumType {
 	return &file_msg_proto_enumTypes[0]
 }
 
-func (x Mutex_Enum) Number() protoreflect.EnumNumber {
+func (x Model_Enum) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use Mutex_Enum.Descriptor instead.
-func (Mutex_Enum) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use Model_Enum.Descriptor instead.
+func (Model_Enum) EnumDescriptor() ([]byte, []int) {
 	return file_msg_proto_rawDescGZIP(), []int{0, 0}
 }
 
-type Mutex struct {
+type Model struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Mutex Mutex_Enum `protobuf:"varint,1,opt,name=mutex,proto3,enum=kase.Mutex_Enum" json:"mutex,omitempty"`
+	Enum    Model_Enum `protobuf:"varint,1,opt,name=enum,proto3,enum=kase.Model_Enum" json:"enum,omitempty"`
+	Bool    bool       `protobuf:"varint,2,opt,name=bool,proto3" json:"bool,omitempty"`
+	String_ string     `protobuf:"bytes,3,opt,name=string,proto3" json:"string,omitempty"`
+	Blob    []byte     `protobuf:"bytes,4,opt,name=blob,proto3" json:"blob,omitempty"`
+	Int64   int64      `protobuf:"varint,5,opt,name=int64,proto3" json:"int64,omitempty"`
+	Uint64  uint64     `protobuf:"varint,6,opt,name=uint64,proto3" json:"uint64,omitempty"`
+	Double  float64    `protobuf:"fixed64,7,opt,name=double,proto3" json:"double,omitempty"`
+	Set     []string   `protobuf:"bytes,8,rep,name=set,proto3" json:"set,omitempty"`
+	BlobSet [][]byte   `protobuf:"bytes,9,rep,name=blob_set,json=blobSet,proto3" json:"blob_set,omitempty"`
 }
 
-func (x *Mutex) Reset() {
-	*x = Mutex{}
+func (x *Model) Reset() {
+	*x = Model{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_msg_proto_msgTypes[0]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -86,13 +94,13 @@ func (x *Mutex) Reset() {
 	}
 }
 
-func (x *Mutex) String() string {
+func (x *Model) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Mutex) ProtoMessage() {}
+func (*Model) ProtoMessage() {}
 
-func (x *Mutex) ProtoReflect() protoreflect.Message {
+func (x *Model) ProtoReflect() protoreflect.Message {
 	mi := &file_msg_proto_msgTypes[0]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -104,433 +112,98 @@ func (x *Mutex) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Mutex.ProtoReflect.Descriptor instead.
-func (*Mutex) Descriptor() ([]byte, []int) {
+// Deprecated: Use Model.ProtoReflect.Descriptor instead.
+func (*Model) Descriptor() ([]byte, []int) {
 	return file_msg_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Mutex) GetMutex() Mutex_Enum {
+func (x *Model) GetEnum() Model_Enum {
 	if x != nil {
-		return x.Mutex
+		return x.Enum
 	}
-	return Mutex_none
+	return Model_none
 }
 
-type BSI struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Int    int64   `protobuf:"varint,1,opt,name=int,proto3" json:"int,omitempty"`
-	Double float64 `protobuf:"fixed64,2,opt,name=double,proto3" json:"double,omitempty"`
-}
-
-func (x *BSI) Reset() {
-	*x = BSI{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_msg_proto_msgTypes[1]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *BSI) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BSI) ProtoMessage() {}
-
-func (x *BSI) ProtoReflect() protoreflect.Message {
-	mi := &file_msg_proto_msgTypes[1]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BSI.ProtoReflect.Descriptor instead.
-func (*BSI) Descriptor() ([]byte, []int) {
-	return file_msg_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *BSI) GetInt() int64 {
-	if x != nil {
-		return x.Int
-	}
-	return 0
-}
-
-func (x *BSI) GetDouble() float64 {
-	if x != nil {
-		return x.Double
-	}
-	return 0
-}
-
-type Bool struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Bool bool `protobuf:"varint,1,opt,name=bool,proto3" json:"bool,omitempty"`
-}
-
-func (x *Bool) Reset() {
-	*x = Bool{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_msg_proto_msgTypes[2]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *Bool) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Bool) ProtoMessage() {}
-
-func (x *Bool) ProtoReflect() protoreflect.Message {
-	mi := &file_msg_proto_msgTypes[2]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Bool.ProtoReflect.Descriptor instead.
-func (*Bool) Descriptor() ([]byte, []int) {
-	return file_msg_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *Bool) GetBool() bool {
+func (x *Model) GetBool() bool {
 	if x != nil {
 		return x.Bool
 	}
 	return false
 }
 
-type String struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	String_ string `protobuf:"bytes,1,opt,name=string,proto3" json:"string,omitempty"`
-}
-
-func (x *String) Reset() {
-	*x = String{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_msg_proto_msgTypes[3]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *String) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*String) ProtoMessage() {}
-
-func (x *String) ProtoReflect() protoreflect.Message {
-	mi := &file_msg_proto_msgTypes[3]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use String.ProtoReflect.Descriptor instead.
-func (*String) Descriptor() ([]byte, []int) {
-	return file_msg_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *String) GetString_() string {
+func (x *Model) GetString_() string {
 	if x != nil {
 		return x.String_
 	}
 	return ""
 }
 
-type Blob struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Blob []byte `protobuf:"bytes,1,opt,name=blob,proto3" json:"blob,omitempty"`
-}
-
-func (x *Blob) Reset() {
-	*x = Blob{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_msg_proto_msgTypes[4]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *Blob) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Blob) ProtoMessage() {}
-
-func (x *Blob) ProtoReflect() protoreflect.Message {
-	mi := &file_msg_proto_msgTypes[4]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Blob.ProtoReflect.Descriptor instead.
-func (*Blob) Descriptor() ([]byte, []int) {
-	return file_msg_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *Blob) GetBlob() []byte {
+func (x *Model) GetBlob() []byte {
 	if x != nil {
 		return x.Blob
 	}
 	return nil
 }
 
-type StringSet struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	String_ []string `protobuf:"bytes,1,rep,name=string,proto3" json:"string,omitempty"`
-}
-
-func (x *StringSet) Reset() {
-	*x = StringSet{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_msg_proto_msgTypes[5]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *StringSet) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*StringSet) ProtoMessage() {}
-
-func (x *StringSet) ProtoReflect() protoreflect.Message {
-	mi := &file_msg_proto_msgTypes[5]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use StringSet.ProtoReflect.Descriptor instead.
-func (*StringSet) Descriptor() ([]byte, []int) {
-	return file_msg_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *StringSet) GetString_() []string {
+func (x *Model) GetInt64() int64 {
 	if x != nil {
-		return x.String_
+		return x.Int64
 	}
-	return nil
+	return 0
 }
 
-type BlobSet struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Uint64 [][]byte `protobuf:"bytes,1,rep,name=uint64,proto3" json:"uint64,omitempty"`
-}
-
-func (x *BlobSet) Reset() {
-	*x = BlobSet{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_msg_proto_msgTypes[6]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *BlobSet) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BlobSet) ProtoMessage() {}
-
-func (x *BlobSet) ProtoReflect() protoreflect.Message {
-	mi := &file_msg_proto_msgTypes[6]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BlobSet.ProtoReflect.Descriptor instead.
-func (*BlobSet) Descriptor() ([]byte, []int) {
-	return file_msg_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *BlobSet) GetUint64() [][]byte {
+func (x *Model) GetUint64() uint64 {
 	if x != nil {
 		return x.Uint64
 	}
+	return 0
+}
+
+func (x *Model) GetDouble() float64 {
+	if x != nil {
+		return x.Double
+	}
+	return 0
+}
+
+func (x *Model) GetSet() []string {
+	if x != nil {
+		return x.Set
+	}
 	return nil
 }
 
-type TimestampMS struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Timestamp int64 `protobuf:"varint,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-}
-
-func (x *TimestampMS) Reset() {
-	*x = TimestampMS{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_msg_proto_msgTypes[7]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *TimestampMS) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TimestampMS) ProtoMessage() {}
-
-func (x *TimestampMS) ProtoReflect() protoreflect.Message {
-	mi := &file_msg_proto_msgTypes[7]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TimestampMS.ProtoReflect.Descriptor instead.
-func (*TimestampMS) Descriptor() ([]byte, []int) {
-	return file_msg_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *TimestampMS) GetTimestamp() int64 {
+func (x *Model) GetBlobSet() [][]byte {
 	if x != nil {
-		return x.Timestamp
+		return x.BlobSet
 	}
-	return 0
-}
-
-type TimestampNS struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Timestamp uint64 `protobuf:"varint,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-}
-
-func (x *TimestampNS) Reset() {
-	*x = TimestampNS{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_msg_proto_msgTypes[8]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *TimestampNS) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TimestampNS) ProtoMessage() {}
-
-func (x *TimestampNS) ProtoReflect() protoreflect.Message {
-	mi := &file_msg_proto_msgTypes[8]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TimestampNS.ProtoReflect.Descriptor instead.
-func (*TimestampNS) Descriptor() ([]byte, []int) {
-	return file_msg_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *TimestampNS) GetTimestamp() uint64 {
-	if x != nil {
-		return x.Timestamp
-	}
-	return 0
+	return nil
 }
 
 var File_msg_proto protoreflect.FileDescriptor
 
 var file_msg_proto_rawDesc = []byte{
 	0x0a, 0x09, 0x6d, 0x73, 0x67, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x04, 0x6b, 0x61, 0x73,
-	0x65, 0x22, 0x54, 0x0a, 0x05, 0x4d, 0x75, 0x74, 0x65, 0x78, 0x12, 0x26, 0x0a, 0x05, 0x6d, 0x75,
-	0x74, 0x65, 0x78, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x10, 0x2e, 0x6b, 0x61, 0x73, 0x65,
-	0x2e, 0x4d, 0x75, 0x74, 0x65, 0x78, 0x2e, 0x45, 0x6e, 0x75, 0x6d, 0x52, 0x05, 0x6d, 0x75, 0x74,
-	0x65, 0x78, 0x22, 0x23, 0x0a, 0x04, 0x45, 0x6e, 0x75, 0x6d, 0x12, 0x08, 0x0a, 0x04, 0x6e, 0x6f,
-	0x6e, 0x65, 0x10, 0x00, 0x12, 0x08, 0x0a, 0x04, 0x7a, 0x65, 0x72, 0x6f, 0x10, 0x01, 0x12, 0x07,
-	0x0a, 0x03, 0x6f, 0x6e, 0x65, 0x10, 0x02, 0x22, 0x2f, 0x0a, 0x03, 0x42, 0x53, 0x49, 0x12, 0x10,
-	0x0a, 0x03, 0x69, 0x6e, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x03, 0x69, 0x6e, 0x74,
-	0x12, 0x16, 0x0a, 0x06, 0x64, 0x6f, 0x75, 0x62, 0x6c, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x01,
-	0x52, 0x06, 0x64, 0x6f, 0x75, 0x62, 0x6c, 0x65, 0x22, 0x1a, 0x0a, 0x04, 0x42, 0x6f, 0x6f, 0x6c,
-	0x12, 0x12, 0x0a, 0x04, 0x62, 0x6f, 0x6f, 0x6c, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52, 0x04,
-	0x62, 0x6f, 0x6f, 0x6c, 0x22, 0x20, 0x0a, 0x06, 0x53, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x12, 0x16,
-	0x0a, 0x06, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06,
-	0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x1a, 0x0a, 0x04, 0x42, 0x6c, 0x6f, 0x62, 0x12, 0x12,
-	0x0a, 0x04, 0x62, 0x6c, 0x6f, 0x62, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x04, 0x62, 0x6c,
-	0x6f, 0x62, 0x22, 0x23, 0x0a, 0x09, 0x53, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x53, 0x65, 0x74, 0x12,
-	0x16, 0x0a, 0x06, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x18, 0x01, 0x20, 0x03, 0x28, 0x09, 0x52,
-	0x06, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x21, 0x0a, 0x07, 0x42, 0x6c, 0x6f, 0x62, 0x53,
-	0x65, 0x74, 0x12, 0x16, 0x0a, 0x06, 0x75, 0x69, 0x6e, 0x74, 0x36, 0x34, 0x18, 0x01, 0x20, 0x03,
-	0x28, 0x0c, 0x52, 0x06, 0x75, 0x69, 0x6e, 0x74, 0x36, 0x34, 0x22, 0x2b, 0x0a, 0x0b, 0x54, 0x69,
-	0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x4d, 0x53, 0x12, 0x1c, 0x0a, 0x09, 0x74, 0x69, 0x6d,
-	0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x09, 0x74, 0x69,
-	0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x22, 0x2b, 0x0a, 0x0b, 0x54, 0x69, 0x6d, 0x65, 0x73,
-	0x74, 0x61, 0x6d, 0x70, 0x4e, 0x53, 0x12, 0x1c, 0x0a, 0x09, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x74,
-	0x61, 0x6d, 0x70, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x09, 0x74, 0x69, 0x6d, 0x65, 0x73,
-	0x74, 0x61, 0x6d, 0x70, 0x42, 0x21, 0x5a, 0x1f, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63,
-	0x6f, 0x6d, 0x2f, 0x67, 0x65, 0x72, 0x6e, 0x65, 0x73, 0x74, 0x2f, 0x72, 0x62, 0x66, 0x2f, 0x64,
-	0x73, 0x6c, 0x2f, 0x6b, 0x61, 0x73, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x65, 0x22, 0x85, 0x02, 0x0a, 0x05, 0x4d, 0x6f, 0x64, 0x65, 0x6c, 0x12, 0x24, 0x0a, 0x04, 0x65,
+	0x6e, 0x75, 0x6d, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x10, 0x2e, 0x6b, 0x61, 0x73, 0x65,
+	0x2e, 0x4d, 0x6f, 0x64, 0x65, 0x6c, 0x2e, 0x45, 0x6e, 0x75, 0x6d, 0x52, 0x04, 0x65, 0x6e, 0x75,
+	0x6d, 0x12, 0x12, 0x0a, 0x04, 0x62, 0x6f, 0x6f, 0x6c, 0x18, 0x02, 0x20, 0x01, 0x28, 0x08, 0x52,
+	0x04, 0x62, 0x6f, 0x6f, 0x6c, 0x12, 0x16, 0x0a, 0x06, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x18,
+	0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x12, 0x12, 0x0a,
+	0x04, 0x62, 0x6c, 0x6f, 0x62, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x04, 0x62, 0x6c, 0x6f,
+	0x62, 0x12, 0x14, 0x0a, 0x05, 0x69, 0x6e, 0x74, 0x36, 0x34, 0x18, 0x05, 0x20, 0x01, 0x28, 0x03,
+	0x52, 0x05, 0x69, 0x6e, 0x74, 0x36, 0x34, 0x12, 0x16, 0x0a, 0x06, 0x75, 0x69, 0x6e, 0x74, 0x36,
+	0x34, 0x18, 0x06, 0x20, 0x01, 0x28, 0x04, 0x52, 0x06, 0x75, 0x69, 0x6e, 0x74, 0x36, 0x34, 0x12,
+	0x16, 0x0a, 0x06, 0x64, 0x6f, 0x75, 0x62, 0x6c, 0x65, 0x18, 0x07, 0x20, 0x01, 0x28, 0x01, 0x52,
+	0x06, 0x64, 0x6f, 0x75, 0x62, 0x6c, 0x65, 0x12, 0x10, 0x0a, 0x03, 0x73, 0x65, 0x74, 0x18, 0x08,
+	0x20, 0x03, 0x28, 0x09, 0x52, 0x03, 0x73, 0x65, 0x74, 0x12, 0x19, 0x0a, 0x08, 0x62, 0x6c, 0x6f,
+	0x62, 0x5f, 0x73, 0x65, 0x74, 0x18, 0x09, 0x20, 0x03, 0x28, 0x0c, 0x52, 0x07, 0x62, 0x6c, 0x6f,
+	0x62, 0x53, 0x65, 0x74, 0x22, 0x23, 0x0a, 0x04, 0x45, 0x6e, 0x75, 0x6d, 0x12, 0x08, 0x0a, 0x04,
+	0x6e, 0x6f, 0x6e, 0x65, 0x10, 0x00, 0x12, 0x08, 0x0a, 0x04, 0x7a, 0x65, 0x72, 0x6f, 0x10, 0x01,
+	0x12, 0x07, 0x0a, 0x03, 0x6f, 0x6e, 0x65, 0x10, 0x02, 0x42, 0x21, 0x5a, 0x1f, 0x67, 0x69, 0x74,
+	0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x67, 0x65, 0x72, 0x6e, 0x65, 0x73, 0x74, 0x2f,
+	0x72, 0x62, 0x66, 0x2f, 0x64, 0x73, 0x6c, 0x2f, 0x6b, 0x61, 0x73, 0x65, 0x62, 0x06, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -546,21 +219,13 @@ func file_msg_proto_rawDescGZIP() []byte {
 }
 
 var file_msg_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_msg_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_msg_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_msg_proto_goTypes = []interface{}{
-	(Mutex_Enum)(0),     // 0: kase.Mutex.Enum
-	(*Mutex)(nil),       // 1: kase.Mutex
-	(*BSI)(nil),         // 2: kase.BSI
-	(*Bool)(nil),        // 3: kase.Bool
-	(*String)(nil),      // 4: kase.String
-	(*Blob)(nil),        // 5: kase.Blob
-	(*StringSet)(nil),   // 6: kase.StringSet
-	(*BlobSet)(nil),     // 7: kase.BlobSet
-	(*TimestampMS)(nil), // 8: kase.TimestampMS
-	(*TimestampNS)(nil), // 9: kase.TimestampNS
+	(Model_Enum)(0), // 0: kase.Model.Enum
+	(*Model)(nil),   // 1: kase.Model
 }
 var file_msg_proto_depIdxs = []int32{
-	0, // 0: kase.Mutex.mutex:type_name -> kase.Mutex.Enum
+	0, // 0: kase.Model.enum:type_name -> kase.Model.Enum
 	1, // [1:1] is the sub-list for method output_type
 	1, // [1:1] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
@@ -575,103 +240,7 @@ func file_msg_proto_init() {
 	}
 	if !protoimpl.UnsafeEnabled {
 		file_msg_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Mutex); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_msg_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BSI); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_msg_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Bool); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_msg_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*String); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_msg_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Blob); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_msg_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*StringSet); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_msg_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BlobSet); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_msg_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TimestampMS); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_msg_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TimestampNS); i {
+			switch v := v.(*Model); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -689,7 +258,7 @@ func file_msg_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_msg_proto_rawDesc,
 			NumEnums:      1,
-			NumMessages:   9,
+			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -3,26 +3,20 @@ package kase;
 
 option go_package = "github.com/gernest/rbf/dsl/kase";
 
-message Mutex {
-  Enum mutex = 1;
+message Model {
+  Enum enum
+  = 1;
   enum Enum {
     none = 0;
     zero = 1;
     one = 2;
   }
+  bool bool = 2;
+  string string = 3;
+  bytes blob = 4;
+  int64 int64 = 5;
+  uint64 uint64 = 6;
+  double double = 7;
+  repeated string set = 8;
+  repeated bytes blob_set = 9;
 }
-
-message BSI {
-  int64 int = 1;
-  double double = 2;
-}
-
-message Bool { bool bool = 1; }
-message String { string string = 1; }
-message Blob { bytes blob = 1; }
-
-message StringSet { repeated string string = 1; }
-message BlobSet { repeated bytes uint64 = 1; }
-
-message TimestampMS { int64 timestamp = 1; }
-message TimestampNS { uint64 timestamp = 1; }

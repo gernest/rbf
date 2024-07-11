@@ -5,29 +5,15 @@ import (
 
 	"github.com/gernest/rbf/dsl/db"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 type Store[T proto.Message] struct {
-	db             *db.Shards
-	ops            *Ops
-	timestampField protoreflect.Name
-	skip           []string
+	db     *db.Shards
+	ops    *Ops
+	schema *Schema[T]
 }
 
 type Option[T proto.Message] func(store *Store[T])
-
-func WithTimestampField[T proto.Message](name string) Option[T] {
-	return func(store *Store[T]) {
-		store.timestampField = protoreflect.Name(name)
-	}
-}
-
-func WithSkip[T proto.Message](field ...string) Option[T] {
-	return func(store *Store[T]) {
-		store.skip = field
-	}
-}
 
 func New[T proto.Message](path string, opts ...Option[T]) (*Store[T], error) {
 	o, err := newOps(path)
@@ -40,7 +26,14 @@ func New[T proto.Message](path string, opts ...Option[T]) (*Store[T], error) {
 		return nil, err
 	}
 
-	s := &Store[T]{db: db, ops: o, timestampField: TimestampField}
+	schema, err := NewSchema[T]()
+	if err != nil {
+		o.Close()
+		db.Close()
+		return nil, err
+	}
+
+	s := &Store[T]{db: db, ops: o, schema: schema}
 	for i := range opts {
 		opts[i](s)
 	}

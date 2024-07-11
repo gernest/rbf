@@ -1,16 +1,13 @@
 package dsl
 
-func (s *Store[T]) Append(data []T) error {
-	schema, err := s.Schema()
-	if err != nil {
-		return err
-	}
-	defer schema.Release()
+func (s *Store[T]) Append(data []T) {
 	for i := range data {
-		err = schema.Write(data[i])
-		if err != nil {
-			return err
-		}
+		s.schema.Write(data[i])
 	}
-	return schema.Save()
+}
+func (s *Store[T]) Flush() error {
+	if len(s.schema.ids) == 0 {
+		return nil
+	}
+	return s.schema.Process(s)
 }

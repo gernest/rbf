@@ -3,7 +3,6 @@ package dsl
 import (
 	"cmp"
 	"errors"
-	"fmt"
 	"path/filepath"
 	"slices"
 
@@ -165,37 +164,20 @@ type writeOps struct {
 	seq   *bbolt.Bucket
 }
 
-func (o *writeOps) NextID() (uint64, error) {
-	return o.seq.NextSequence()
-}
-
 func (o *writeOps) Release() error {
-	if o == nil {
-		return nil
-	}
 	return errors.Join(o.tx.Rollback(), o.tr.Release())
 }
 
-func (o *writeOps) Commit(m map[string]*roaring.Bitmap) error {
-	defer o.Release()
-
-	for view, shards := range m {
-		if data := o.views.Get([]byte(view)); data != nil {
-			r := roaring.NewBitmap()
-			err := r.UnmarshalBinary(data)
-			if err != nil {
-				return fmt.Errorf("reading shards bitmap %w", err)
-			}
-			shards.IntersectInPlace(r)
-		}
-		data, err := shards.MarshalBinary()
+func (o *writeOps) fill(ids []uint64) (err error) {
+	for i := range ids {
+		ids[i], err = o.seq.NextSequence()
 		if err != nil {
-			return fmt.Errorf("marshal shards bitmap %w", err)
-		}
-		err = o.views.Put([]byte(view), data)
-		if err != nil {
-			return fmt.Errorf("put shards bitmap %w", err)
+			return
 		}
 	}
+	return
+}
+
+func (o *writeOps) Commit() error {
 	return errors.Join(o.tx.Commit(), o.tr.Commit())
 }

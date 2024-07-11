@@ -3,32 +3,18 @@ package dsl
 import (
 	"fmt"
 	"math"
-	"time"
+	"slices"
 
 	"github.com/gernest/rbf"
-	"github.com/gernest/rbf/dsl/boolean"
 	"github.com/gernest/rbf/dsl/bsi"
-	"github.com/gernest/rbf/dsl/mutex"
-	"github.com/gernest/rbf/dsl/tr"
-	"github.com/gernest/rbf/quantum"
 	"github.com/gernest/roaring"
 	"github.com/gernest/roaring/shardwidth"
-	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 const (
-	StandardView   = "standard"
-	Quantum        = "20060102"
-	TimestampField = protoreflect.Name("timestamp")
-	ID             = "_id"
-
-	// It might be excessive but our goal is to be extremely useful and by having
-	// database per shard we can afford being this granular
-	//
-	// Timeseries endpoints for vince requires
-	IngestQuantum = "YMDH"
+	ID = "_id"
 )
 
 type Fields map[string]*roaring.Bitmap
@@ -42,346 +28,347 @@ func (f Fields) get(id string) *roaring.Bitmap {
 	return a
 }
 
-type Views map[string]Fields
+type Shards map[uint64]Fields
 
-func (v Views) get(id string) Fields {
-	a, ok := v[id]
-	if !ok {
-		a = make(Fields)
-		v[id] = a
-	}
-	return a
-}
-
-type Shards map[uint64]Views
-
-func (s Shards) get(id uint64) Views {
+func (s Shards) get(id uint64) Fields {
 	a, ok := s[id]
 	if !ok {
-		a = make(Views)
+		a = make(Fields)
 		s[id] = a
 	}
 	return a
 }
 
-type Writers map[string]writeFn
-
 // Schema maps proto fields to rbf types.
 type Schema[T proto.Message] struct {
-	store          *Store[T]
-	ops            *writeOps
-	shards         Shards
-	fields         protoreflect.FieldDescriptors
-	timeStringBuf  []byte
-	timeViews      [][]byte
-	hasTime        bool
-	timeFieldIndex int
-	skip           []string
+	ids    []uint64
+	rowIDs [][]uint64
+	values [][]int64
 
-	cache map[protoreflect.FieldNumber]tr.Translate
+	keys   [][]string
+	trKeys [][]uint64
+	sets   [][][]string
+	trSets [][][]uint64
+
+	blobs     [][][]byte
+	trBlobs   [][]uint64
+	blobSets  [][][][]byte
+	trBlobSet [][][]uint64
+
+	mapping map[string]int
 }
 
-func (s *Store[T]) Schema() (*Schema[T], error) {
-	w, err := s.ops.write()
-	if err != nil {
-		return nil, err
-	}
+func NewSchema[T proto.Message]() (*Schema[T], error) {
 	var a T
-	st := &Schema[T]{
-		store:  s,
-		shards: make(Shards),
-		ops:    w,
-		fields: a.ProtoReflect().Descriptor().Fields(),
-		skip:   s.skip,
-		cache:  make(map[protowire.Number]tr.Translate),
-	}
-	if f := a.ProtoReflect().Descriptor().Fields().ByName(s.timestampField); f != nil {
-		st.hasTime = true
-		st.timeFieldIndex = f.Index()
-		// We're supporting time quantums, so we need to store bits in a
-		// number of views for every entry with a timestamp. We want to compute
-		// time quantum view names for whatever combination of YMDH views
-		// we have. But we don't want to allocate four strings per entry, or
-		// recompute and recreate the entire string. We know that only the
-		// YYYYMMDDHH part of the string changes over time.
-		st.timeStringBuf = make([]byte, len(StandardView)+11)
-		copy(st.timeStringBuf, []byte(StandardView))
-		copy(st.timeStringBuf[len(StandardView):], []byte("_YYYYMMDDHH"))
-		// Now we have a buffer that contains
-		// `standard_YYYYMMDDHH`. We also need storage space to hold several
-		// slice headers, one per entry in q. These will hold the view names
-		// corresponding to each letter in q.
-		st.timeViews = make([][]byte, len(IngestQuantum))
+
+	rs := &Schema[T]{
+		mapping: make(map[string]int),
 	}
 
-	return st, st.validate(a)
-}
-
-func (s *Schema[T]) Commit(m map[string]*roaring.Bitmap) error {
-	return s.ops.Commit(m)
-}
-
-func (s *Schema[T]) Release() (err error) {
-	if x := s.ops.Release(); x != nil {
-		err = x
-	}
-	clear(s.shards)
-	s.ops = nil
-	return
-}
-
-func (s *Schema[T]) next() (uint64, error) {
-	if s.ops != nil {
-		return s.ops.NextID()
-	}
-	var err error
-	s.ops, err = s.store.ops.write()
-	if err != nil {
-		return 0, err
-	}
-	return s.ops.NextID()
-}
-
-type timeFmt func(value protoreflect.Value) time.Time
-
-var timeQuantum = map[protoreflect.Kind]timeFmt{
-	protoreflect.Int64Kind:  ms,
-	protoreflect.Uint64Kind: ns,
-}
-
-func ms(value protoreflect.Value) time.Time {
-	return time.UnixMilli(value.Int())
-}
-
-func ns(value protoreflect.Value) time.Time {
-	return time.Unix(0, int64(value.Uint()))
-}
-
-type RangeCallback func(shard uint64, views Views) error
-
-func (s *Schema[T]) Range(f RangeCallback) error {
-	for k, v := range s.shards {
-		err := f(k, v)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (s *Schema[T]) Write(msg T) error {
-	id, err := s.next()
-	if err != nil {
-		return err
-	}
-	return s.write(id, msg.ProtoReflect())
-}
-
-func (s *Schema[T]) write(id uint64, msg protoreflect.Message) (err error) {
-	shard := id / shardwidth.ShardWidth
-
-	// all fields go to standard view. There is no need to differentiate between
-	// bsi and non bsi because we use generics and T ensures we work with actual
-	// field types.
-
-	if s.hasTime {
-		tsField := msg.Descriptor().Fields().Get(s.timeFieldIndex)
-		// We support historical data. To avoid touching shards that don't have
-		// relevant data we create quantum views that only apply to string or string
-		// set columns.
-		ts := timeQuantum[tsField.Kind()](msg.Get(tsField))
-		s.timeViews = quantum.ViewsByTimeInto(s.timeStringBuf, s.timeViews, ts.UTC(), IngestQuantum)
-
-	}
-	vs := s.shards.get(shard)
-	idBit := id % shardwidth.ShardWidth
-	vs.get(StandardView).get(ID).DirectAdd(idBit)
-	if s.hasTime {
-		for i := range s.timeViews {
-			vs.get(string(s.timeViews[i])).get(ID).DirectAdd(idBit)
-		}
-	}
-	msg.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-		name := string(fd.Name())
-		kind := fd.Kind()
-		tr := s.cache[fd.Number()]
-		err = writers[kind](vs.get(StandardView).get(name), tr, fd, id, v)
-		if err != nil {
-			return false
-		}
-		if s.hasTime {
-			for i := range s.timeViews {
-				err = writers[kind](vs.get(string(s.timeViews[i])).get(name), tr, fd, id, v)
-				if err != nil {
-					return false
-				}
-			}
-		}
-		return true
-	})
-	return
-}
-
-type writeFn func(r *roaring.Bitmap, tr tr.Translate, field protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) error
-
-func (s *Schema[T]) validate(msg proto.Message) error {
-	fields := msg.ProtoReflect().Descriptor().Fields()
+	fields := a.ProtoReflect().Descriptor().Fields()
 	for i := 0; i < fields.Len(); i++ {
 		f := fields.Get(i)
+		name := string(f.Name())
 		if f.IsList() {
 			// only []string  and [][]byte is supported
 			switch f.Kind() {
 			case protoreflect.StringKind:
-				err := s.cacheStringFieldTr(f)
-				if err != nil {
-					return err
-				}
+				pos := len(rs.sets)
+				rs.sets = append(rs.sets, nil)
+				rs.trSets = append(rs.trSets, nil)
+				rs.mapping[name] = pos
+			case protoreflect.BytesKind:
+				pos := len(rs.blobSets)
+				rs.blobSets = append(rs.blobSets, nil)
+				rs.trBlobSet = append(rs.trBlobSet, nil)
+				rs.mapping[name] = pos
 			default:
-				return fmt.Errorf("%s list is not supported", f.Kind())
+				return nil, fmt.Errorf("%s list is not supported", f.Kind())
 			}
 			continue
 		}
 		switch f.Kind() {
 		case protoreflect.BoolKind,
-			protoreflect.EnumKind,
-			protoreflect.Int64Kind,
+			protoreflect.EnumKind:
+			pos := len(rs.rowIDs)
+			rs.rowIDs = append(rs.rowIDs, nil)
+			rs.mapping[name] = pos
+
+		case protoreflect.Int64Kind,
 			protoreflect.Uint64Kind,
 			protoreflect.DoubleKind:
+			pos := len(rs.values)
+			rs.values = append(rs.values, nil)
+			rs.mapping[name] = pos
 
 		case protoreflect.StringKind:
-			err := s.cacheStringFieldTr(f)
-			if err != nil {
-				return err
-			}
+			pos := len(rs.keys)
+			rs.keys = append(rs.keys, nil)
+			rs.trKeys = append(rs.trKeys, nil)
+			rs.mapping[name] = pos
 		case protoreflect.BytesKind:
-			err := s.cacheBlobFieldTr(f)
-			if err != nil {
-				return err
-			}
+			pos := len(rs.blobs)
+			rs.blobs = append(rs.blobs, nil)
+			rs.trBlobs = append(rs.trBlobs, nil)
+			rs.mapping[name] = pos
 		default:
-			return fmt.Errorf("%s is not supported", f.Kind())
+			return nil, fmt.Errorf("%q %s is not supported", name, f.Kind())
 		}
 	}
-	return nil
+	return rs, nil
 }
 
-func (s *Schema[T]) cacheStringFieldTr(f protoreflect.FieldDescriptor) error {
-	name := f.Name()
-	cache, err := s.ops.tr.String(string(name))
-	if err != nil {
-		return err
+func (s *Schema[T]) Reset() {
+	s.ids = s.ids[:0]
+	reset(s.rowIDs)
+	reset(s.values)
+
+	resetClear(s.keys)
+	reset(s.trKeys)
+	resetClear(s.sets)
+	reset(s.trSets)
+
+	resetClear(s.blobs)
+	reset(s.trBlobs)
+	resetClear(s.blobSets)
+	reset(s.trBlobSet)
+}
+
+func reset[T any](ls [][]T) {
+	for i := range ls {
+		ls[i] = ls[i][:0]
 	}
-	s.cache[f.Number()] = cache
-	return nil
 }
 
-func (s *Schema[T]) cacheBlobFieldTr(f protoreflect.FieldDescriptor) error {
-	name := f.Name()
-	cache, err := s.ops.tr.Blobs(string(name))
-	if err != nil {
-		return err
+func resetClear[T any](ls [][]T) {
+	for i := range ls {
+		clear(ls[i])
+		ls[i] = ls[i][:0]
 	}
-	s.cache[f.Number()] = cache
-	return nil
 }
 
-func (s *Schema[T]) Save() error {
-	defer s.Release()
-	m := map[string]*roaring.Bitmap{}
-	err := s.Range(func(shard uint64, views Views) error {
-		return s.store.db.Update(shard, func(tx *rbf.Tx) error {
-			for view, fields := range views {
-				b, ok := m[view]
-				if !ok {
-					b = roaring.NewBitmap(shard)
-					m[view] = b
-				} else {
-					if !b.Contains(shard) {
-						b.DirectAdd(shard)
+func (s *Schema[T]) Write(msg T) {
+	// We generate ids later on when applying the schema
+	s.ids = append(s.ids, 0)
+	r := msg.ProtoReflect()
+	fs := r.Descriptor().Fields()
+	for i := 0; i < fs.Len(); i++ {
+		fd := fs.Get(i)
+		v := r.Get(fd)
+		name := string(fd.Name())
+		pos := s.mapping[name]
+		switch fd.Kind() {
+		case protoreflect.BoolKind:
+			value := uint64(0)
+			if v.Bool() {
+				value = 1
+			}
+			s.rowIDs[pos] = append(s.rowIDs[pos], value)
+		case protoreflect.EnumKind:
+			s.rowIDs[pos] = append(s.rowIDs[pos], uint64(v.Enum()))
+		case protoreflect.Int64Kind:
+			s.values[pos] = append(s.values[pos], v.Int())
+		case protoreflect.Uint64Kind:
+			s.values[pos] = append(s.values[pos], int64(v.Uint()))
+		case protoreflect.DoubleKind:
+			s.values[pos] = append(s.values[pos], int64(math.Float64bits(v.Float())))
+		case protoreflect.StringKind:
+			if fd.IsList() {
+				ls := v.List()
+				vs := []string{}
+				if ls.Len() != 0 {
+					vs = make([]string, 0, ls.Len())
+					for n := range ls.Len() {
+						vs = append(vs, ls.Get(n).String())
 					}
 				}
-				for field, data := range fields {
-					key := ViewKey(field, view)
-					_, err := tx.AddRoaring(key, data)
-					if err != nil {
-						return fmt.Errorf("adding batch data for %s shard:%d %w", key, shard, err)
+				s.sets[pos] = append(s.sets[pos], vs)
+			} else {
+				s.keys[pos] = append(s.keys[pos], v.String())
+			}
+		case protoreflect.BytesKind:
+			if fd.IsList() {
+				ls := v.List()
+				vs := [][]byte{}
+				if ls.Len() != 0 {
+					vs = make([][]byte, 0, ls.Len())
+					for n := range ls.Len() {
+						vs = append(vs, ls.Get(n).Bytes())
 					}
+				}
+				s.blobSets[pos] = append(s.blobSets[pos], vs)
+			} else {
+				s.blobs[pos] = append(s.blobs[pos], v.Bytes())
+			}
+		}
+	}
+}
+
+func (s *Schema[T]) Process(db *Store[T]) error {
+	defer s.Reset()
+
+	w, err := db.ops.write()
+	if err != nil {
+		return err
+	}
+	defer w.Release()
+
+	// generate ids
+	err = w.fill(s.ids)
+	if err != nil {
+		return err
+	}
+	var msg T
+	fields := msg.ProtoReflect().Descriptor().Fields()
+	for fi := 0; fi < fields.Len(); fi++ {
+		f := fields.Get(fi)
+		name := string(f.Name())
+		pos := s.mapping[name]
+		switch f.Kind() {
+		case protoreflect.BoolKind:
+			x := s.rowIDs[pos]
+			for i := range s.ids {
+				x[i] = (x[i] * shardwidth.ShardWidth) + (s.ids[i] % shardwidth.ShardWidth)
+			}
+		case protoreflect.Int64Kind, protoreflect.DoubleKind:
+			// need special handling, delay this to the next per shard iteration
+
+		case protoreflect.StringKind:
+			st, err := w.tr.String(name)
+			if err != nil {
+				return err
+			}
+			if f.IsList() {
+				s.trSets[pos] = adjustSet(s.trSets[pos], s.sets[pos])
+				err = st.BulkSet(s.sets[pos], s.trSets[pos])
+				if err != nil {
+					return err
+				}
+				x := s.trSets[pos]
+				for i := range s.ids {
+					for j := range x[i] {
+						x[i][j] = (x[i][j] * shardwidth.ShardWidth) + (s.ids[i] % shardwidth.ShardWidth)
+					}
+				}
+			}
+			s.trKeys[pos] = adjust(s.trKeys[pos], s.keys[pos])
+			err = st.Bulk(s.keys[pos], s.trKeys[pos])
+			if err != nil {
+				return err
+			}
+			x := s.trKeys[pos]
+			for i := range s.ids {
+				x[i] = (x[i] * shardwidth.ShardWidth) + (s.ids[i] % shardwidth.ShardWidth)
+			}
+		case protoreflect.BytesKind:
+			st, err := w.tr.Blobs(name)
+			if err != nil {
+				return err
+			}
+			if f.IsList() {
+				s.trBlobSet[pos] = adjustSet(s.trBlobSet[pos], s.blobSets[pos])
+				err = st.BulkSet(s.blobSets[pos], s.trBlobSet[pos])
+				if err != nil {
+					return err
+				}
+				x := s.trBlobSet[pos]
+
+				for i := range s.ids {
+					for j := range x[i] {
+						x[i][j] = (x[i][j] * shardwidth.ShardWidth) + (s.ids[i] % shardwidth.ShardWidth)
+					}
+				}
+				continue
+			}
+			s.trBlobs[pos] = adjust(s.trBlobs[pos], s.blobs[pos])
+			err = st.Bulk(s.blobs[pos], s.trBlobs[pos])
+			if err != nil {
+				return err
+			}
+			x := s.trBlobs[pos]
+			for i := range s.ids {
+				x[i] = (x[i] * shardwidth.ShardWidth) + (s.ids[i] % shardwidth.ShardWidth)
+			}
+		}
+	}
+
+	for start, end := 0,
+		shardwidth.FindNextShard(0, s.ids); start < len(s.ids) && end <= len(s.ids); start, end = end,
+		shardwidth.FindNextShard(end, s.ids) {
+		shard := s.ids[start] / shardwidth.ShardWidth
+		err := db.db.Update(shard, func(tx *rbf.Tx) error {
+			for i := 0; i < fields.Len(); i++ {
+				f := fields.Get(i)
+				name := string(f.Name())
+				pos := s.mapping[name]
+				switch f.Kind() {
+				case protoreflect.Int64Kind,
+					protoreflect.Uint64Kind,
+					protoreflect.DoubleKind:
+					b := roaring.NewBitmap()
+					for n := start; n < end; n++ {
+						bsi.Add(b, s.ids[n], s.values[pos][n])
+					}
+					_, err := tx.AddRoaring(name, b)
+					if err != nil {
+						return err
+					}
+				case protoreflect.BoolKind, protoreflect.EnumKind:
+					_, err := tx.Add(name, s.rowIDs[pos][start:end]...)
+					if err != nil {
+						return err
+					}
+				case protoreflect.StringKind:
+					if f.IsList() {
+						x := s.trSets[pos][shard:end]
+						for n := range x {
+							_, err := tx.Add(name, x[n]...)
+							if err != nil {
+								return err
+							}
+						}
+						continue
+					}
+					_, err := tx.Add(name, s.trKeys[pos][start:end]...)
+					if err != nil {
+						return err
+					}
+
+				case protoreflect.BytesKind:
+					if f.IsList() {
+						x := s.trBlobSet[pos][shard:end]
+						for n := range x {
+							_, err := tx.Add(name, x[n]...)
+							if err != nil {
+								return err
+							}
+						}
+						continue
+					}
+					_, err := tx.Add(name, s.trBlobs[pos][start:end]...)
+					if err != nil {
+						return err
+					}
+
 				}
 			}
 			return nil
 		})
-	})
-	if err != nil {
-		return err
-	}
-	return s.Commit(m)
-}
-
-var (
-	writers = map[protoreflect.Kind]writeFn{
-		protoreflect.BoolKind:   Bool,
-		protoreflect.EnumKind:   Enum,
-		protoreflect.Int64Kind:  Int64,
-		protoreflect.Uint64Kind: Uint64,
-		protoreflect.DoubleKind: Float64,
-		protoreflect.StringKind: String,
-		protoreflect.BytesKind:  Bytes,
-	}
-)
-
-// Bool writes a boolean proto value
-func Bool(r *roaring.Bitmap, _ tr.Translate, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) error {
-	boolean.Add(r, id, value.Bool())
-	return nil
-}
-
-// Enum writes enum proto value
-func Enum(r *roaring.Bitmap, _ tr.Translate, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) error {
-	mutex.Add(r, id, uint64(value.Enum()))
-	return nil
-}
-
-// Int64 writes int64 proto value
-func Int64(r *roaring.Bitmap, _ tr.Translate, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) error {
-	bsi.Add(r, id, value.Int())
-	return nil
-}
-
-func Uint64(r *roaring.Bitmap, _ tr.Translate, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) error {
-	bsi.Add(r, id, int64(value.Uint()))
-	return nil
-}
-
-func Float64(r *roaring.Bitmap, _ tr.Translate, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) error {
-	bsi.Add(r, id, int64(math.Float64bits(value.Float())))
-	return nil
-}
-
-func String(r *roaring.Bitmap, tr tr.Translate, field protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) error {
-	if field.IsList() {
-		ls := value.List()
-		for i := 0; i < ls.Len(); i++ {
-			bit, err := tr.Tr([]byte(ls.Get(i).String()))
-			if err != nil {
-				return err
-			}
-			mutex.Add(r, id, bit)
-		}
-	} else {
-		bit, err := tr.Tr([]byte(value.String()))
 		if err != nil {
 			return err
 		}
-		mutex.Add(r, id, bit)
 	}
 	return nil
 }
 
-func Bytes(r *roaring.Bitmap, tr tr.Translate, _ protoreflect.FieldDescriptor, id uint64, value protoreflect.Value) error {
-	bit, err := tr.Tr(value.Bytes())
-	if err != nil {
-		return err
+func adjust[T any](tr []uint64, in []T) []uint64 {
+	return slices.Grow(tr, len(in))[:len(in)]
+}
+
+func adjustSet[T any](tr [][]uint64, in [][]T) [][]uint64 {
+	tr = slices.Grow(tr, len(in))[:len(in)]
+	for i := range tr {
+		tr[i] = adjust(tr[i], in[i])
 	}
-	bsi.Add(r, id, int64(bit))
-	return nil
+	return tr
 }
