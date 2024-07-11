@@ -20,7 +20,7 @@ func Filter(field string, value bool) *Match {
 var _ query.Filter = (*Match)(nil)
 
 func (m *Match) Apply(tx *tx.Tx, columns *rows.Row) (*rows.Row, error) {
-	c, err := tx.Tx.Cursor(tx.Key(m.field))
+	c, err := tx.Tx.Cursor(m.field)
 	if err != nil {
 		return nil, err
 	}
