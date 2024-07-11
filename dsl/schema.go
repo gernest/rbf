@@ -203,7 +203,7 @@ func (s *Schema[T]) Process(db *Store[T]) error {
 		name := string(f.Name())
 		pos := s.mapping[name]
 		switch f.Kind() {
-		case protoreflect.BoolKind:
+		case protoreflect.BoolKind, protoreflect.EnumKind:
 			x := s.rowIDs[pos]
 			for i := range s.ids {
 				x[i] = (x[i] * shardwidth.ShardWidth) + (s.ids[i] % shardwidth.ShardWidth)
@@ -337,7 +337,7 @@ func (s *Schema[T]) Process(db *Store[T]) error {
 			return err
 		}
 	}
-	return nil
+	return w.Commit()
 }
 
 func adjust[T any](tr []uint64, in []T) []uint64 {
