@@ -13,9 +13,7 @@ type Store[T proto.Message] struct {
 	schema *Schema[T]
 }
 
-type Option[T proto.Message] func(store *Store[T])
-
-func New[T proto.Message](path string, opts ...Option[T]) (*Store[T], error) {
+func New[T proto.Message](path string, bsi ...string) (*Store[T], error) {
 	o, err := newOps(path)
 	if err != nil {
 		return nil, err
@@ -26,7 +24,7 @@ func New[T proto.Message](path string, opts ...Option[T]) (*Store[T], error) {
 		return nil, err
 	}
 
-	schema, err := NewSchema[T]()
+	schema, err := NewSchema[T](bsi...)
 	if err != nil {
 		o.Close()
 		db.Close()
@@ -34,9 +32,6 @@ func New[T proto.Message](path string, opts ...Option[T]) (*Store[T], error) {
 	}
 
 	s := &Store[T]{db: db, ops: o, schema: schema}
-	for i := range opts {
-		opts[i](s)
-	}
 	return s, nil
 }
 

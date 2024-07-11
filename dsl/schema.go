@@ -34,13 +34,18 @@ type Schema[T proto.Message] struct {
 	trBlobSet [][][]uint64
 
 	mapping map[string]int
+	bsi     map[string]struct{}
 }
 
-func NewSchema[T proto.Message]() (*Schema[T], error) {
+func NewSchema[T proto.Message](bsi ...string) (*Schema[T], error) {
 	var a T
 
 	rs := &Schema[T]{
 		mapping: make(map[string]int),
+		bsi:     make(map[string]struct{}),
+	}
+	for i := range bsi {
+		rs.bsi[bsi[i]] = struct{}{}
 	}
 
 	fields := a.ProtoReflect().Descriptor().Fields()
@@ -264,6 +269,9 @@ func (s *Schema[T]) Process(db *Store[T]) error {
 			if err != nil {
 				return err
 			}
+			if _, ok := s.bsi[name]; ok {
+				continue
+			}
 			x := s.trBlobs[pos]
 			for i := range s.ids {
 				x[i] = (x[i] * shardwidth.ShardWidth) + (s.ids[i] % shardwidth.ShardWidth)
@@ -321,6 +329,17 @@ func (s *Schema[T]) Process(db *Store[T]) error {
 							if err != nil {
 								return err
 							}
+						}
+						continue
+					}
+					if _, ok := s.bsi[name]; ok {
+						b := roaring.NewBitmap()
+						for n := start; n < end; n++ {
+							bsi.Add(b, s.ids[n], int64(s.trBlobs[pos][n]))
+						}
+						_, err := tx.AddRoaring(name, b)
+						if err != nil {
+							return err
 						}
 						continue
 					}
