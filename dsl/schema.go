@@ -228,6 +228,7 @@ func (s *Schema[T]) Process(db *Store[T]) error {
 						x[i][j] = (x[i][j] * shardwidth.ShardWidth) + (s.ids[i] % shardwidth.ShardWidth)
 					}
 				}
+				continue
 			}
 			s.trKeys[pos] = adjust(s.trKeys[pos], s.keys[pos])
 			err = st.Bulk(s.keys[pos], s.trKeys[pos])
