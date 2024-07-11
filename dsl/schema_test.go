@@ -37,3 +37,31 @@ func TestStore(t *testing.T) {
 	})
 	require.Equal(t, want, got)
 }
+
+func BenchmarkWrite(b *testing.B) {
+	db, err := New[*kase.Model](b.TempDir())
+	require.NoError(b, err)
+	defer db.Close()
+	data := []*kase.Model{
+		{},
+		{
+			Enum:    kase.Model_one,
+			Bool:    true,
+			String_: "hello",
+			Blob:    []byte("hello"),
+			Int64:   math.MaxInt64,
+			Uint64:  shardwidth.ShardWidth,
+			Double:  math.MaxFloat64,
+			Set:     []string{"hello"},
+			BlobSet: [][]byte{[]byte("hello")},
+		},
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for range b.N {
+		db.Append(data)
+		db.Flush()
+	}
+}
