@@ -5,6 +5,8 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
+	"io"
+	"sync"
 
 	"github.com/blevesearch/vellum"
 	"github.com/blevesearch/vellum/regexp"
@@ -118,12 +120,18 @@ func (w *Write) Commit() error {
 	return w.tx.Commit()
 }
 
+var builderPool = &sync.Pool{New: func() any {
+	b, _ := vellum.New(io.Discard, nil)
+	return b
+}}
+
 func (w *Write) vellum() error {
 	var o bytes.Buffer
-	b, err := vellum.New(&o, nil)
-	if err != nil {
-		return err
-	}
+	b := builderPool.Get().(*vellum.Builder)
+	defer func() {
+		b.Reset(io.Discard)
+		builderPool.Put(b)
+	}()
 	return w.keys.ForEachBucket(func(k []byte) error {
 		o.Reset()
 		err := b.Reset(&o)

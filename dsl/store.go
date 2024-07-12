@@ -82,7 +82,7 @@ func (s *Store[T]) updateShards(shards []uint64) {
 	s.mu.Unlock()
 }
 
-func (s *Store[T]) allShards() *roaring64.Bitmap {
+func (s *Store[T]) Shards() *roaring64.Bitmap {
 	s.mu.RLock()
 	a := s.shards.Clone()
 	s.mu.RUnlock()

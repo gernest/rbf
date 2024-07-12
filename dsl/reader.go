@@ -36,7 +36,7 @@ func (r *Reader[T]) View(f func(txn *tx.Tx) error) error {
 	}
 	defer txn.Rollback()
 
-	it := r.store.allShards().Iterator()
+	it := r.store.Shards().Iterator()
 	for it.HasNext() {
 		err = f(tx.New(txn, it.Next(), r.ops.tr))
 		if err != nil {
