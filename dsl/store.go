@@ -58,7 +58,9 @@ func New[T proto.Message](path string, bsi ...string) (*Store[T], error) {
 	prefix := tx.ViewKeyPrefix(ID)
 	for i := range views {
 		if strings.HasPrefix(views[i], prefix) {
-			shard, err := strconv.ParseUint(strings.TrimPrefix(views[i], prefix), 10, 64)
+			f := strings.TrimPrefix(views[i], prefix)
+			f = strings.TrimSuffix(f, "<")
+			shard, err := strconv.ParseUint(f, 10, 64)
 			if err != nil {
 				return nil, fmt.Errorf("parsing shards%w", err)
 			}
