@@ -22,12 +22,12 @@ func Filter(field string, value uint64) *Match {
 var _ query.Filter = (*Match)(nil)
 
 func (m *Match) Apply(tx *tx.Tx, columns *rows.Row) (*rows.Row, error) {
-	c, err := tx.Tx.Cursor(m.field)
+	c, err := tx.Get(m.field)
 	if err != nil {
 		return nil, err
 	}
 	defer c.Close()
-	r, err := cursor.Row(c, tx.Shard, m.value)
+	r, err := cursor.Row(c, tx.Shard(), m.value)
 	if err != nil {
 		return nil, err
 	}

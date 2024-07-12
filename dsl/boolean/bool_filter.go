@@ -20,16 +20,16 @@ func Filter(field string, value bool) *Match {
 var _ query.Filter = (*Match)(nil)
 
 func (m *Match) Apply(tx *tx.Tx, columns *rows.Row) (*rows.Row, error) {
-	c, err := tx.Tx.Cursor(m.field)
+	c, err := tx.Get(m.field)
 	if err != nil {
 		return nil, err
 	}
 	defer c.Close()
 	var r *rows.Row
 	if m.value {
-		r, err = cursor.Row(c, tx.Shard, trueRowID)
+		r, err = cursor.Row(c, tx.Shard(), trueRowID)
 	} else {
-		r, err = cursor.Row(c, tx.Shard, falseRowID)
+		r, err = cursor.Row(c, tx.Shard(), falseRowID)
 	}
 	if err != nil {
 		return nil, err
@@ -45,10 +45,10 @@ func Count(txn *tx.Tx, field string, isTrue bool, columns *rows.Row) (count int6
 		var r *rows.Row
 		var err error
 		if isTrue {
-			r, err = cursor.Row(c, tx.Shard, trueRowID)
+			r, err = cursor.Row(c, tx.Shard(), trueRowID)
 
 		} else {
-			r, err = cursor.Row(c, tx.Shard, falseRowID)
+			r, err = cursor.Row(c, tx.Shard(), falseRowID)
 		}
 		if err != nil {
 			return err

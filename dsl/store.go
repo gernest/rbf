@@ -2,15 +2,22 @@ package dsl
 
 import (
 	"errors"
+	"path/filepath"
+	"sync"
 
-	"github.com/gernest/rbf/dsl/db"
+	"github.com/RoaringBitmap/roaring/roaring64"
+	"github.com/gernest/rbf"
 	"google.golang.org/protobuf/proto"
 )
 
 type Store[T proto.Message] struct {
-	db     *db.Shards
+	db     *rbf.DB
 	ops    *Ops
 	schema *Schema[T]
+
+	shards roaring64.Bitmap
+
+	mu sync.RWMutex
 }
 
 func New[T proto.Message](path string, bsi ...string) (*Store[T], error) {
@@ -18,7 +25,8 @@ func New[T proto.Message](path string, bsi ...string) (*Store[T], error) {
 	if err != nil {
 		return nil, err
 	}
-	db, err := db.New(path)
+	db := rbf.NewDB(filepath.Join(path, "rbf"), nil)
+	err = db.Open()
 	if err != nil {
 		o.Close()
 		return nil, err
@@ -39,6 +47,32 @@ func (s *Store[T]) Close() error {
 	return errors.Join(s.db.Close(), s.ops.Close())
 }
 
-func (s *Store[T]) DB() *db.Shards {
+func (s *Store[T]) DB() *rbf.DB {
 	return s.db
+}
+
+func (s *Store[T]) updateShards(shards []uint64) {
+	s.mu.Lock()
+	s.shards.AddMany(shards)
+	s.mu.Unlock()
+}
+
+func (s *Store[T]) allShards() *roaring64.Bitmap {
+	s.mu.RLock()
+	a := s.shards.Clone()
+	s.mu.RUnlock()
+	return a
+}
+
+func (s *Store[T]) update(f func(tx *rbf.Tx) error) error {
+	tx, err := s.db.Begin(true)
+	if err != nil {
+		return err
+	}
+	err = f(tx)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }

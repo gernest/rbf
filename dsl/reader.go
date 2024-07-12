@@ -1,7 +1,6 @@
 package dsl
 
 import (
-	"github.com/gernest/rbf"
 	"github.com/gernest/rbf/dsl/tr"
 	"github.com/gernest/rbf/dsl/tx"
 	"google.golang.org/protobuf/proto"
@@ -31,17 +30,18 @@ func (r *Reader[T]) Tr() *tr.Read {
 }
 
 func (r *Reader[T]) View(f func(txn *tx.Tx) error) error {
-	return r.store.db.View(func(txn *rbf.Tx, shard uint64) error {
-		rx, err := r.store.ops.read()
+	txn, err := r.store.db.Begin(false)
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	it := r.store.allShards().Iterator()
+	for it.HasNext() {
+		err = f(tx.New(txn, it.Next(), r.ops.tr))
 		if err != nil {
 			return err
 		}
-		defer rx.Release()
-		return f(&tx.Tx{
-			Tx:    txn,
-			Shard: shard,
-			Tr:    rx.tr,
-		})
-
-	})
+	}
+	return nil
 }

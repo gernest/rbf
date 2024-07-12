@@ -4,8 +4,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gernest/rbf"
 	"github.com/gernest/rbf/dsl/kase"
+	"github.com/gernest/rbf/dsl/tx"
 	"github.com/gernest/roaring/shardwidth"
 	"github.com/stretchr/testify/require"
 )
@@ -29,12 +29,17 @@ func TestStore(t *testing.T) {
 		},
 	})
 	require.NoError(t, db.Flush())
-	want := []string{"blob", "blob_set", "bool", "double", "enum", "int64", "set", "string", "uint64"}
+	want := []string{"~blob;0<", "~blob_set;0<",
+		"~bool;0<", "~double;0<", "~enum;0<", "~int64;0<", "~set;0<", "~string;0<", "~uint64;0<"}
 	var got []string
-	db.db.View(func(tx *rbf.Tx, _ uint64) error {
-		got = tx.FieldViews()
+	r, err := db.Reader()
+	require.NoError(t, err)
+	defer r.Release()
+	err = r.View(func(txn *tx.Tx) error {
+		got = txn.Views()
 		return nil
 	})
+	require.NoError(t, err)
 	require.Equal(t, want, got)
 }
 

@@ -26,12 +26,12 @@ func Filter(field string, value uint64) *Match {
 var _ query.Filter = (*Match)(nil)
 
 func (m *Match) Apply(tx *tx.Tx, columns *rows.Row) (*rows.Row, error) {
-	c, err := tx.Tx.Cursor(m.field)
+	c, err := tx.Get(m.field)
 	if err != nil {
 		return nil, err
 	}
 	defer c.Close()
-	r, err := cursor.Row(c, tx.Shard, m.value)
+	r, err := cursor.Row(c, tx.Shard(), m.value)
 	if err != nil {
 		return nil, err
 	}
@@ -101,14 +101,14 @@ func neqBlob(c *rbf.Cursor, field string, key []byte, tx *tx.Tx, columns *rows.R
 
 func existence(txn *tx.Tx) (r *rows.Row, err error) {
 	err = txn.Cursor("_id", func(c *rbf.Cursor, tx *tx.Tx) error {
-		r, err = cursor.Row(c, tx.Shard, 0)
+		r, err = cursor.Row(c, tx.Shard(), 0)
 		return err
 	})
 	return
 }
 
 func eq(c *rbf.Cursor, field string, key []byte, tx *tx.Tx, columns *rows.Row) (r *rows.Row, err error) {
-	id, ok := tx.Tr.Find(field, key)
+	id, ok := tx.Find(field, key)
 	if !ok {
 		return rows.NewRow(), nil
 	}
@@ -116,7 +116,7 @@ func eq(c *rbf.Cursor, field string, key []byte, tx *tx.Tx, columns *rows.Row) (
 }
 
 func eqBlob(c *rbf.Cursor, field string, key []byte, tx *tx.Tx, columns *rows.Row) (r *rows.Row, err error) {
-	id, ok := tx.Tr.Find(field, key)
+	id, ok := tx.Find(field, key)
 	if !ok {
 		return rows.NewRow(), nil
 	}
@@ -124,7 +124,7 @@ func eqBlob(c *rbf.Cursor, field string, key []byte, tx *tx.Tx, columns *rows.Ro
 }
 
 func eqID(c *rbf.Cursor, tx *tx.Tx, id uint64, columns *rows.Row) (r *rows.Row, err error) {
-	r, err = cursor.Row(c, tx.Shard, id)
+	r, err = cursor.Row(c, tx.Shard(), id)
 	if err != nil {
 		return
 	}
@@ -147,7 +147,7 @@ func (m *MatchString) nre(c *rbf.Cursor, tx *tx.Tx, columns *rows.Row) (r *rows.
 }
 
 func (m *MatchString) re(c *rbf.Cursor, tx *tx.Tx, columns *rows.Row) (r *rows.Row, err error) {
-	err = tx.Tr.SearchRe(m.Field, m.Value, nil, nil, func(key []byte, value uint64) error {
+	err = tx.SearchRe(m.Field, m.Value, nil, nil, func(key []byte, value uint64) error {
 		n, err := eqID(c, tx, value, columns)
 		if err != nil {
 			return err

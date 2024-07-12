@@ -25,10 +25,10 @@ func Filter(field string, op Operation, valueOrStart int64, end int64) *Match {
 var _ query.Filter = (*Match)(nil)
 
 func (m *Match) Apply(tx *tx.Tx, columns *rows.Row) (*rows.Row, error) {
-	c, err := tx.Tx.Cursor(m.field)
+	c, err := tx.Get(m.field)
 	if err != nil {
 		return nil, err
 	}
 	defer c.Close()
-	return Compare(c, tx.Shard, m.op, m.valueOrStart, m.end, columns)
+	return Compare(c, tx.Shard(), m.op, m.valueOrStart, m.end, columns)
 }

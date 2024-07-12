@@ -7,6 +7,7 @@ import (
 
 	"github.com/gernest/rbf"
 	"github.com/gernest/rbf/dsl/bsi"
+	"github.com/gernest/rbf/dsl/tx"
 	"github.com/gernest/roaring"
 	"github.com/gernest/roaring/shardwidth"
 	"google.golang.org/protobuf/proto"
@@ -187,7 +188,7 @@ func (s *Schema[T]) Write(msg T) {
 	}
 }
 
-func (s *Schema[T]) Process(db *Store[T]) error {
+func (s *Schema[T]) process(db *Store[T]) error {
 	defer s.Reset()
 
 	w, err := db.ops.write()
@@ -278,16 +279,19 @@ func (s *Schema[T]) Process(db *Store[T]) error {
 			}
 		}
 	}
-
-	for start, end := 0,
-		shardwidth.FindNextShard(0, s.ids); start < len(s.ids) && end <= len(s.ids); start, end = end,
-		shardwidth.FindNextShard(end, s.ids) {
-		shard := s.ids[start] / shardwidth.ShardWidth
-		err := db.db.Update(shard, func(tx *rbf.Tx, _ uint64) error {
+	// sufficient to cover up to 2097152 records
+	shards := make([]uint64, 0, 2)
+	viewKey := tx.ViewKey
+	err = db.update(func(tx *rbf.Tx) error {
+		for start, end := 0,
+			shardwidth.FindNextShard(0, s.ids); start < len(s.ids) && end <= len(s.ids); start, end = end,
+			shardwidth.FindNextShard(end, s.ids) {
+			shard := s.ids[start] / shardwidth.ShardWidth
+			shards = append(shards, shard)
 			for i := 0; i < fields.Len(); i++ {
 				f := fields.Get(i)
-				name := string(f.Name())
-				pos := s.mapping[name]
+				view := viewKey(string(f.Name()), shard)
+				pos := s.mapping[string(f.Name())]
 				switch f.Kind() {
 				case protoreflect.Int64Kind,
 					protoreflect.Uint64Kind,
@@ -296,12 +300,12 @@ func (s *Schema[T]) Process(db *Store[T]) error {
 					for n := start; n < end; n++ {
 						bsi.Add(b, s.ids[n], s.values[pos][n])
 					}
-					_, err := tx.AddRoaring(name, b)
+					_, err := tx.AddRoaring(view, b)
 					if err != nil {
 						return err
 					}
 				case protoreflect.BoolKind, protoreflect.EnumKind:
-					_, err := tx.Add(name, s.rowIDs[pos][start:end]...)
+					_, err := tx.Add(view, s.rowIDs[pos][start:end]...)
 					if err != nil {
 						return err
 					}
@@ -309,14 +313,14 @@ func (s *Schema[T]) Process(db *Store[T]) error {
 					if f.IsList() {
 						x := s.trSets[pos][shard:end]
 						for n := range x {
-							_, err := tx.Add(name, x[n]...)
+							_, err := tx.Add(view, x[n]...)
 							if err != nil {
 								return err
 							}
 						}
 						continue
 					}
-					_, err := tx.Add(name, s.trKeys[pos][start:end]...)
+					_, err := tx.Add(view, s.trKeys[pos][start:end]...)
 					if err != nil {
 						return err
 					}
@@ -325,38 +329,44 @@ func (s *Schema[T]) Process(db *Store[T]) error {
 					if f.IsList() {
 						x := s.trBlobSet[pos][shard:end]
 						for n := range x {
-							_, err := tx.Add(name, x[n]...)
+							_, err := tx.Add(view, x[n]...)
 							if err != nil {
 								return err
 							}
 						}
 						continue
 					}
-					if _, ok := s.bsi[name]; ok {
+					if _, ok := s.bsi[view]; ok {
 						b := roaring.NewBitmap()
 						for n := start; n < end; n++ {
 							bsi.Add(b, s.ids[n], int64(s.trBlobs[pos][n]))
 						}
-						_, err := tx.AddRoaring(name, b)
+						_, err := tx.AddRoaring(view, b)
 						if err != nil {
 							return err
 						}
 						continue
 					}
-					_, err := tx.Add(name, s.trBlobs[pos][start:end]...)
+					_, err := tx.Add(view, s.trBlobs[pos][start:end]...)
 					if err != nil {
 						return err
 					}
-
 				}
 			}
-			return nil
-		})
-		if err != nil {
-			return err
 		}
+		return nil
+	})
+
+	if err != nil {
+		return err
 	}
-	return w.Commit()
+	err = w.Commit()
+	if err != nil {
+		return err
+	}
+	// update observed shards
+	db.updateShards(shards)
+	return nil
 }
 
 func adjust[T any](tr []uint64, in []T) []uint64 {

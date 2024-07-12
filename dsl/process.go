@@ -10,5 +10,5 @@ func (s *Store[T]) Flush() error {
 	if len(s.schema.ids) == 0 {
 		return nil
 	}
-	return s.schema.Process(s)
+	return s.schema.process(s)
 }
