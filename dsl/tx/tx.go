@@ -66,3 +66,7 @@ func (tx *Tx) Cursor(field string, f func(c *rbf.Cursor, tx *Tx) error) error {
 func ViewKey(field string, shard uint64) string {
 	return fmt.Sprintf("~%s;%d<", field, shard)
 }
+
+func ViewKeyPrefix(field string) string {
+	return fmt.Sprintf("~%s;", field)
+}

@@ -2,11 +2,15 @@ package dsl
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/RoaringBitmap/roaring/roaring64"
 	"github.com/gernest/rbf"
+	"github.com/gernest/rbf/dsl/tx"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -40,6 +44,27 @@ func New[T proto.Message](path string, bsi ...string) (*Store[T], error) {
 	}
 
 	s := &Store[T]{db: db, ops: o, schema: schema}
+
+	// load shards
+	txn, err := db.Begin(false)
+	if err != nil {
+		o.Close()
+		db.Close()
+		return nil, err
+	}
+	defer txn.Rollback()
+
+	views := txn.FieldViews()
+	prefix := tx.ViewKeyPrefix(ID)
+	for i := range views {
+		if strings.HasPrefix(views[i], prefix) {
+			shard, err := strconv.ParseUint(strings.TrimPrefix(views[i], prefix), 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("parsing shards%w", err)
+			}
+			s.shards.Add(shard)
+		}
+	}
 	return s, nil
 }
 
