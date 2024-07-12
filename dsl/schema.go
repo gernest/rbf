@@ -336,7 +336,7 @@ func (s *Schema[T]) process(db *Store[T]) error {
 						}
 						continue
 					}
-					if _, ok := s.bsi[view]; ok {
+					if _, ok := s.bsi[string(f.Name())]; ok {
 						b := roaring.NewBitmap()
 						for n := start; n < end; n++ {
 							bsi.Add(b, s.ids[n], int64(s.trBlobs[pos][n]))
