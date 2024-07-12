@@ -7,6 +7,7 @@ import (
 
 	"github.com/gernest/rbf"
 	"github.com/gernest/rbf/dsl/bsi"
+	"github.com/gernest/rbf/dsl/mutex"
 	"github.com/gernest/rbf/dsl/tx"
 	"github.com/gernest/roaring"
 	"github.com/gernest/roaring/shardwidth"
@@ -353,6 +354,16 @@ func (s *Schema[T]) process(db *Store[T]) error {
 					}
 				}
 			}
+			// save ids in the _id field
+			b := roaring.NewBitmap()
+			for n := start; n < end; n++ {
+				mutex.Add(b, s.ids[n], s.ids[n])
+			}
+			_, err := tx.AddRoaring(viewKey(ID, shard), b)
+			if err != nil {
+				return err
+			}
+
 		}
 		return nil
 	})

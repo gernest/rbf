@@ -29,7 +29,9 @@ func TestStore(t *testing.T) {
 		},
 	})
 	require.NoError(t, db.Flush())
-	want := []string{"~blob;0<", "~blob_set;0<",
+	want := []string{
+		"~_id;0<",
+		"~blob;0<", "~blob_set;0<",
 		"~bool;0<", "~double;0<", "~enum;0<", "~int64;0<", "~set;0<", "~string;0<", "~uint64;0<"}
 	var got []string
 	r, err := db.Reader()
